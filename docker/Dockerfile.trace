@@ -1,0 +1,38 @@
+FROM pytorch/pytorch:2.12.1-cuda12.6-cudnn9-devel
+
+ARG DEBIAN_FRONTEND=noninteractive
+
+# install the basics
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends \
+ vim \
+ tmux \
+ cmake \
+ gcc \
+ g++ \
+ git \
+ build-essential \
+ sudo \
+ wget \
+ curl \
+ zip \
+ unzip
+
+# add a user
+ARG user_id
+ARG USER jammy
+RUN userdel ubuntu
+RUN useradd -U --uid ${user_id} -ms /bin/bash $USER \
+ && echo "$USER:$USER" | chpasswd \
+ && adduser $USER sudo \
+ && echo "$USER ALL=NOPASSWD: ALL" >> /etc/sudoers.d/$USER
+
+# add groups to get access to sensors
+USER $USER
+WORKDIR /home/$USER 
+
+RUN sudo apt install -y python3-pip
+RUN pip3 install --break-system-packages transformers onnx onnxruntime
+RUN pip3 install --break-system-packages opencv-python-headless
+
+RUN echo 'export PS1="\[$(tput setaf 2; tput bold)\]\u\[$(tput setaf 7)\]@\[$(tput setaf 3)\]\h\[$(tput setaf 7)\]:\[$(tput setaf 4)\]\W\[$(tput setaf 7)\]$ \[$(tput sgr0)\]"' >> ~/.bashrc
