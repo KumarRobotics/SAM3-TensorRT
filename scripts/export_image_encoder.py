@@ -11,7 +11,7 @@ import warnings
 warnings.filterwarnings('ignore')
 
 try:
-    from transformers import Sam3Model, Sam3Processor
+    from transformers import Sam3Model, Sam3Processor, Sam3Config
     import onnx
     import onnxruntime as ort
     from huggingface_hub import login
@@ -99,15 +99,18 @@ def trace_and_export_image_encoder(model : torch.nn.Module, input : Any, onnx_pa
 
 if __name__ == "__main__":
     login(token=HF_KEY)
-    print(f"Loading SAM3 ({MODEL_ID}) on {DEVICE}...")
-    
-    model = Sam3Model.from_pretrained(MODEL_ID, token=HF_KEY)
-    processor = Sam3Processor.from_pretrained(MODEL_ID, target_size=644, token=HF_KEY)
+    print(f"[ImageEncoderExport] Loading SAM3 ({MODEL_ID}) on {DEVICE}...")
+    config = Sam3Config.from_pretrained(MODEL_ID, token=HF_KEY)
+    config.image_size = 644
+    model = Sam3Model.from_pretrained(MODEL_ID, config=config, token=HF_KEY)
+    processor = Sam3Processor.from_pretrained(MODEL_ID, token=HF_KEY)
 
     model = model.to(device=DEVICE).eval()
     img = cv2.imread("test.png")
-    inp = processor(images=img, text="road", return_tensors="pt").to(DEVICE)
 
+    processor.image_processor.size = {"height": 644, "width": 644}
+    inp = processor(images=img, text="road", return_tensors="pt").to(DEVICE)
+    print(f"[ImageEncoderExport] Tracing with image size {inp.pixel_values.shape}")
     trace_and_export_image_encoder(model, inp.pixel_values, MODELS_DIR / "image_encoder.onnx")
 
 

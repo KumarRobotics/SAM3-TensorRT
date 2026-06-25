@@ -8,7 +8,7 @@ import numpy as np
 from pathlib import Path
 from typing import Tuple, List, Optional, Any
 
-from transformers import Sam3Model, Sam3Processor
+from transformers import Sam3Model, Sam3Processor, Sam3Config
 from huggingface_hub import login
 import onnx
 import onnxruntime as ort
@@ -95,15 +95,19 @@ def trace_and_export_text_encoder(model : torch.nn.Module, input : Any, onnx_pat
 
 if __name__ == "__main__": 
     login(token=HF_KEY)
-    print(f"Loading SAM3 ({MODEL_ID}) on {DEVICE}...")
-    
-    model = Sam3Model.from_pretrained(MODEL_ID, token=HF_KEY)
-    processor = Sam3Processor.from_pretrained(MODEL_ID, target_size=644, token=HF_KEY)
+    print(f"[TextEncoderExport] Loading SAM3 ({MODEL_ID}) on {DEVICE}...")
+    config = Sam3Config.from_pretrained(MODEL_ID, token=HF_KEY)
+    config.image_size = 644
+    model = Sam3Model.from_pretrained(MODEL_ID, config=config, token=HF_KEY)
+    processor = Sam3Processor.from_pretrained(MODEL_ID, token=HF_KEY)
 
     model = model.to(device=DEVICE).eval()
     img = cv2.imread("test.png")
-    inp = processor(images=img, text="road", return_tensors="pt").to(DEVICE)
 
+    processor.image_processor.size = {"height": 644, "width": 644}
+    inp = processor(images=img, text="road", return_tensors="pt").to(DEVICE)
+    print(f"[ImageEncoderExport] Tracing with input_ids size {inp.input_ids.shape}, and attention_mask size {inp.attention_mask.shape}")
+    
     trace_and_export_text_encoder(model, (inp.input_ids, inp.attention_mask), MODELS_DIR / "text_encoder.onnx") 
 
 
