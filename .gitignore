@@ -3,3 +3,5 @@
 **/*.onnx
 **/*.data
 **/*.plan
+**/*.zip
+**/__pycache__

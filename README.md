@@ -1,6 +1,6 @@
 # SAM3 Tensor RT
 
-This repo is a partial Tensor RT implementation of (SAM 3)[https://huggingface.co/facebook/sam3], designed with multi-class inference in mind. This implementation reuses the image encoding when there are multiple text inputs.
+This repo is a partial Tensor RT implementation of [SAM 3](https://huggingface.co/facebook/sam3), designed with multi-class inference in mind. This implementation reuses the image encoding when there are multiple text inputs.
 
 The TensorRT export must be run on the type of hardware it will be deployed on, i.e. you must export for a jetson on a jetson device.
 

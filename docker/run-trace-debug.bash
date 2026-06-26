@@ -5,8 +5,8 @@ docker run -it --rm \
     --network=host \
     --gpus all \
     -v "/tmp/.X11-unix:/tmp/.X11-unix" \
-    -v "./models:/home/`whoami`/models" \
-    -v "./scripts:/home/`whoami`/scripts" \
+    -v "`pwd`/../models:/home/`whoami`/models" \
+    -v "`pwd`/../scripts:/home/`whoami`/scripts" \
     -e DISPLAY=$DISPLAY \
     -e QT_X11_NO_MITSHM=1 \
     -e XAUTHORITY=$XAUTH \

@@ -27,7 +27,6 @@ MODELS_DIR = REPO_ROOT / "models"
 CONFIG_DIR = REPO_ROOT / "config"
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu") 
-EXPORT_DTYPE = torch.float32
 
 OUTPUT_NAMES = [f"fpn_{i}" for i in range(4)] + [f"pos_{i}" for i in range(4)]
 INPUT_NAME = "pixel_values"
@@ -48,7 +47,35 @@ class ImageEncoderWrapper(torch.nn.Module):
         pos = output.fpn_position_encoding  # tuple of 4 (B, C', H, W)
         return fpn[0], fpn[1], fpn[2], fpn[3], pos[0], pos[1], pos[2], pos[3]
 
-def validate(wrapper: torch.nn.Module, input: Any, onnx_path: Path, atol: float = 1e-2) -> bool:
+def _report(name, out, ref, atol):
+    out = out.detach().float().cpu()
+    ref = ref.detach().float().cpu()
+    if out.shape != ref.shape:
+        print(f"  {name}: SHAPE MISMATCH wrapper={tuple(out.shape)} ref={tuple(ref.shape)}")
+        return False
+    d = (out - ref).abs().max().item()
+    print(f"  {name}: max|diff|={d:.3e}  {'OK' if d < atol else 'FAIL'}")
+    return d < atol
+
+def validate_wrapper(model, input, atol : float = 1e-2) -> bool:
+    model_cpu = model.to('cpu')
+    wrapper = ImageEncoderWrapper(model_cpu).to('cpu')
+    with torch.inference_mode():
+        ref = model.get_vision_features(pixel_values=input.pixel_values.to('cpu'))
+        wrapper_output = wrapper(input.pixel_values.to('cpu'))
+
+    ref_fpn = list(ref.fpn_hidden_states)
+    ref_pos = list(ref.fpn_position_encoding)
+    ref_all = ref_fpn + ref_pos
+    ok = True
+    names = [f"fpn_{i}" for i in range(4)] + [f"pos_{i}" for i in range(4)]
+    for name, w, r in zip(names, wrapper_output, ref_all):
+        ok &= _report(name, w, r, atol)
+    print(f"[ImageEncoder] {'PASS' if ok else 'FAIL'}")
+    return ok
+
+
+def validate_onnx(wrapper: torch.nn.Module, input: Any, onnx_path: Path, atol: float = 1e-2) -> bool:
     print("[ImageEncoderExport] Validating onnx export")
     wrapper = wrapper.to('cpu')
     with torch.inference_mode():
@@ -72,6 +99,12 @@ def validate(wrapper: torch.nn.Module, input: Any, onnx_path: Path, atol: float 
     print(f"[ImageEncoderExport] Passed Tests: {ok}")
     return ok
 
+def image_encoder_forward(model : torch.nn.Module, input : Any) -> Tuple[torch.Tensor]:
+    wrapper = ImageEncoderWrapper(model).to(input.device).eval()
+    with torch.inference_mode():
+        torch_output = wrapper(input)
+    return torch_output
+
 def trace_and_export_image_encoder(model : torch.nn.Module, input : Any, onnx_path : Path) -> torch.Tensor:
     wrapper = ImageEncoderWrapper(model).to(DEVICE).eval()
     print("[ImageEncoderExport] Tracing Image Encoder Model")
@@ -93,7 +126,7 @@ def trace_and_export_image_encoder(model : torch.nn.Module, input : Any, onnx_pa
  
     onnx.checker.check_model(str(onnx_path))
 
-    assert validate(wrapper, input, onnx_path)
+    assert validate_onnx(wrapper, input, onnx_path)
 
     return torch_output
 
@@ -110,6 +143,7 @@ if __name__ == "__main__":
 
     processor.image_processor.size = {"height": 644, "width": 644}
     inp = processor(images=img, text="road", return_tensors="pt").to(DEVICE)
+    validate_wrapper(model, inp)
     print(f"[ImageEncoderExport] Tracing with image size {inp.pixel_values.shape}")
     trace_and_export_image_encoder(model, inp.pixel_values, MODELS_DIR / "image_encoder.onnx")
 
