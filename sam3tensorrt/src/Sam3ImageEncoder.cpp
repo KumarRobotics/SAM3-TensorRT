@@ -1,0 +1,66 @@
+#include "sam3tensorrt/Sam3ImageEncoder.hpp"
+
+#include <iostream>
+#include <stdexcept>
+#include <string>
+
+Sam3ImageEncoder::Sam3ImageEncoder(const std::string& plan_path) : Sam3ModelBase(plan_path)
+{
+    discoverAndAllocate();
+}
+
+Sam3ImageEncoder::~Sam3ImageEncoder() {
+    for (int i = 0; i < 4; ++i) {
+        cudaFree(d_fpn_[i]);
+        cudaFree(d_fpn_pos_[i]);
+    }
+}
+
+void Sam3ImageEncoder::discoverAndAllocate() 
+{
+    const int n = engine_->getNbIOTensors();
+
+    for (int i = 0; i < n; ++i) {
+        const char* name = engine_->getIOTensorName(i);
+
+        if (engine_->getTensorIOMode(name) == nvinfer1::TensorIOMode::kINPUT)
+            continue;  // pixel_values
+
+        const std::string sname(name);
+        const bool is_pos = sname.rfind("pos_", 0) == 0;
+        const int  idx    = sname.back() - '0';
+
+        if (idx < 0 || idx > 3)
+            throw std::runtime_error("Sam3ImageEncoder: unexpected output tensor: " + sname);
+
+        nvinfer1::Dims dims = engine_->getTensorShape(name);
+        size_t count = 1;
+        for (int d = 0; d < dims.nbDims; ++d)
+            count *= static_cast<size_t>(dims.d[d]);
+
+        float** slot = is_pos ? &d_fpn_pos_[idx] : &d_fpn_[idx];
+        if (cudaMalloc(slot, count * sizeof(float)) != cudaSuccess)
+            throw std::runtime_error("Sam3ImageEncoder: cudaMalloc failed for " + sname);
+
+        context_->setTensorAddress(name, *slot);
+
+        std::cout << "[Sam3ImageEncoder] output: " << name
+                  << " [" << count << " floats]\n";
+    }
+
+    for (int i = 0; i < 4; ++i) {
+        features_.fpn[i] = d_fpn_[i];
+        features_.fpn_pos[i] = d_fpn_pos_[i];
+    }
+}
+
+Sam3ImageFeatures Sam3ImageEncoder::encode(const float* d_input, cudaStream_t stream) 
+{
+    context_->setTensorAddress("pixel_values", const_cast<float*>(d_input));
+
+    if (!context_->enqueueV3(stream)) {
+        throw std::runtime_error("Sam3ImageEncoder: enqueueV3 failed");
+    }
+
+    return features_;
+}
