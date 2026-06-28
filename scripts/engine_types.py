@@ -2,6 +2,7 @@ import tensorrt as trt
 
 def inspect_plan(path):
     logger = trt.Logger(trt.Logger.WARNING)
+    trt.init_libnvinfer_plugins(logger, "")  # registers all built-in plugins
     runtime = trt.Runtime(logger)
 
     with open(path, "rb") as f:
@@ -18,3 +19,4 @@ def inspect_plan(path):
 
 inspect_plan("../models/image_encoder.plan")
 inspect_plan("../models/text_encoder.plan")
+inspect_plan("../models/mask_decoder.plan")

@@ -4,6 +4,7 @@
 #include <string>
  
 #include <NvInfer.h>
+#include <NvInferPlugin.h>
  
 /**
  * Shared base for all SAM3 TensorRT sub-models.
