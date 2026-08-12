@@ -1,16 +1,17 @@
 #pragma once
 
-#include "sam3tensorrt/tokenizer.hpp"
+#include "sam3tensorrt/Tokenizer.hpp"
 
 #include <cuda_runtime.h>
 #include <opencv2/opencv.hpp>
 
 #include <cstdint>
 #include <string>
+#include <vector>
 
 struct Sam3ImageInput 
 {
-    float*   d_image; // [1, 3, 644, 644] NCHW float32
+    float* d_image; // [1, 3, 644, 644] NCHW float32
     int32_t* d_original_sizes;  // [1, 2] int32  {height, width} before resize
 };
 
@@ -18,6 +19,12 @@ struct Sam3TextInput
 {
     int32_t* d_input_ids; // [1, 32] int32
     int32_t* d_attention_mask;  // [1, 32] int32
+};
+
+struct Sam3Input
+{
+    Sam3ImageInput image;
+    std::vector<Sam3TextInput> text;
 };
 
 class Sam3Processor 
@@ -31,7 +38,8 @@ class Sam3Processor
             float image_std[3] = {0.229f, 0.224f, 0.225f};  // RGB order
         };
 
-        Sam3Processor(const std::string& merges_path, const std::string& vocab_path, const Params& params = {});
+        Sam3Processor(const std::string& merges_path, const std::string& vocab_path, const Params& params);
+        Sam3Processor(const std::string& merges_path, const std::string& vocab_path);
         ~Sam3Processor();
 
         Sam3Processor(const Sam3Processor&) = delete;
@@ -51,6 +59,8 @@ class Sam3Processor
          * @param text  Raw input string.
          * @return      Device pointers valid until the next preprocessText() call.*/
         Sam3TextInput preprocessText(const std::string& text);
+
+        Sam3Input preprocess(const cv::Mat& image, const std::vector<std::string>& texts);
 
     private:
         void allocateBuffers();

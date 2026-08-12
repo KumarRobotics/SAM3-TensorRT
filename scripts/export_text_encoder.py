@@ -112,10 +112,12 @@ def text_encoder_forward(model : torch.nn.Module, input : Any) -> torch.Tensor:
     return torch_output
 
 def trace_and_export_text_encoder(model : torch.nn.Module, input : Any, onnx_path) -> torch.Tensor:
-    wrapper = TextEncoderWrapper(model)
+    wrapper = TextEncoderWrapper(model).to(DEVICE).half().eval()
     print("[TextEncoderExport] Tracing Text Encoder Model")
     with torch.inference_mode():
-        torch_output = wrapper(input[0], input[1])
+        torch_output = wrapper(input[0].half(), input[1].half())
+
+    input = (input[0].half(), input[1].half())
 
     with torch.inference_mode():
         torch.onnx.export(
@@ -126,6 +128,7 @@ def trace_and_export_text_encoder(model : torch.nn.Module, input : Any, onnx_pat
             output_names=OUTPUT_NAMES,
             opset_version=OPSET,
             do_constant_folding=True,
+            dynamp=True,
             dynamic_axes=None,
         )
  

@@ -1,4 +1,4 @@
-#include "sam3tensorrt/Sam3Processor.h"
+#include "sam3tensorrt/Sam3Processor.hpp"
 #include "sam3tensorrt/cuda/normalize.cuh"
 
 #include <stdexcept>
@@ -11,6 +11,9 @@ Sam3Processor::Sam3Processor(const std::string& merges_path,const std::string& v
     cudaStreamCreate(&stream_);
     allocateBuffers();
 }
+
+Sam3Processor::Sam3Processor(const std::string& merges_path, const std::string& vocab_path) : Sam3Processor(merges_path, vocab_path, Params{})
+{ }
 
 Sam3Processor::~Sam3Processor() 
 {
@@ -123,4 +126,16 @@ Sam3TextInput Sam3Processor::preprocessText(const std::string& text)
     cudaStreamSynchronize(stream_);
 
     return { d_input_ids_, d_attention_mask_ };
+}
+
+Sam3Input Sam3Processor::preprocess(const cv::Mat& image, const std::vector<std::string>& texts)
+{
+    Sam3ImageInput image_input = preprocessImage(image);
+
+    std::vector<Sam3TextInput> text_inputs;
+    for (const std::string& t : texts) {
+        text_inputs.push_back(preprocessText(t));
+    }
+
+    return {image_input, text_inputs};
 }

@@ -32,18 +32,25 @@ message(STATUS "TensorRT lib: ${NVINFER_LIB}")
 
 find_package(OpenCV REQUIRED)
 find_package(CUDAToolkit REQUIRED)
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(JSONCPP REQUIRED jsoncpp)
 
 include_directories(
     include
+    ${TRT_INCLUDE_DIR}
+    ${OpenCV_INCLUDE_DIRS}
+    ${JSONCPP_INCLUDE_DIRS}
 )
 
-add_library(sam3_cuda STATIC 
-  src/normalize.cu
+add_library(sam3tensorrt_cuda STATIC 
+  src/normalize.cu 
+  src/preprocess.cu
+  src/upsample.cu
 )
-target_include_directories(sam3_cuda PUBLIC 
+target_include_directories(sam3tensorrt_cuda PUBLIC 
   ${CMAKE_CURRENT_SOURCE_DIR}
 )
-set_target_properties(sam3_cuda PROPERTIES
+set_target_properties(sam3tensorrt_cuda PROPERTIES
   CUDA_ARCHITECTURES 
   ${CMAKE_CUDA_ARCHITECTURES}
 )
@@ -53,20 +60,19 @@ add_library(${PROJECT_NAME} STATIC
     src/Sam3ImageEncoder.cpp
     src/Sam3TextEncoder.cpp
     src/Sam3MaskDecoder.cpp
+    src/Sam3Processor.cpp
     src/Sam3Model.cpp
-)
-
-target_include_directories(${PROJECT_NAME} PUBLIC
-    ${TRT_INCLUDE_DIR}
-    ${OpenCV_INCLUDE_DIRS}
+    src/Tokenizer.cpp
 )
 
 target_link_libraries(${PROJECT_NAME} PUBLIC
-  sam3_cuda
+  sam3tensorrt_cuda
   ${NVINFER_LIB}
   ${NVINFER_PLUGIN_LIB}
   ${OpenCV_LIBS}
+  ${JSONCPP_LIBRARIES}
   CUDA::cudart
 )
 
-
+enable_testing()
+add_subdirectory(test)
