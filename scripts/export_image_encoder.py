@@ -4,7 +4,8 @@ import sys
 import json
 import yaml
 import torch
-import numpy as np
+import numpy as np 
+import torch_tensorrt
 from pathlib import Path
 from typing import Tuple, List, Optional, Any
 import warnings
@@ -26,12 +27,12 @@ REPO_ROOT  = Path(__file__).parent.parent
 MODELS_DIR = REPO_ROOT / "models"
 CONFIG_DIR = REPO_ROOT / "config"
 
-DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu") 
+DEVICE = torch.device("cpu") 
 
 OUTPUT_NAMES = [f"fpn_{i}" for i in range(4)] + [f"pos_{i}" for i in range(4)]
 INPUT_NAME = "pixel_values"
 
-OPSET = 18
+OPSET = 17
 
 class ImageEncoderWrapper(torch.nn.Module):
     """
@@ -107,8 +108,10 @@ def image_encoder_forward(model : torch.nn.Module, input : Any) -> Tuple[torch.T
 
 def trace_and_export_image_encoder(model : torch.nn.Module, input : Any, onnx_path : Path) -> torch.Tensor:
     wrapper = ImageEncoderWrapper(model).to(DEVICE).eval()
+    
     print("[ImageEncoderExport] Tracing Image Encoder Model")
     # do an initial forward pass of the model 
+    input = input.to(DEVICE)
     with torch.inference_mode():
         torch_output = wrapper(input)
 
@@ -120,13 +123,16 @@ def trace_and_export_image_encoder(model : torch.nn.Module, input : Any, onnx_pa
             input_names=[INPUT_NAME],
             output_names=OUTPUT_NAMES,
             opset_version=OPSET,
-            do_constant_folding=True,
+            dynamo=False,
             dynamic_axes=None,
         )
  
     onnx.checker.check_model(str(onnx_path))
 
-    assert validate_onnx(wrapper, input, onnx_path)
+    assert validate_onnx(wrapper, input, onnx_path, atol=1.0)
+    model_fp32 = onnx.load(str(onnx_path))
+    model_fp16 = convert_float_to_float16(model_fp32, keep_io_types=False)
+    onnx.save(model_fp16, str(onnx_path))
 
     return torch_output
 

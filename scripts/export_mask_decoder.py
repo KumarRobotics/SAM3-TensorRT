@@ -182,20 +182,20 @@ def validate_onnx(wrapper : torch.nn.Module, input : Tuple[Any], onnx_path : Pat
     return ok
 
 def trace_and_export_mask_decoder(model : torch.nn.Module, input : Any, onnx_path) -> Tuple[torch.Tensor]:
-    wrapper = MaskDecoderWrapper(model)
+    wrapper = MaskDecoderWrapper(model).to(DEVICE).half().eval()
     print("[TextEncoderExport] Tracing Text Encoder Model")
     with torch.inference_mode():
-        torch_output = wrapper(input[0],
-                               input[1],
-                               input[2],
-                               input[3],
-                               input[4],
-                               input[5],
-                               input[6],
-                               input[7],
-                               input[8],
-                               input[9],
-                               input[10])
+        torch_output = wrapper(input[0].half(),
+                               input[1].half(),
+                               input[2].half(),
+                               input[3].half(),
+                               input[4].half(),
+                               input[5].half(),
+                               input[6].half(),
+                               input[7].half(),
+                               input[8].half(),
+                               input[9].half(),
+                               input[10].half())
 
     with torch.inference_mode():
         torch.onnx.export(
@@ -206,6 +206,7 @@ def trace_and_export_mask_decoder(model : torch.nn.Module, input : Any, onnx_pat
             output_names=OUTPUT_NAMES,
             opset_version=OPSET,
             do_constant_folding=True,
+            dynamo=True,
             dynamic_axes=None,
         )
  

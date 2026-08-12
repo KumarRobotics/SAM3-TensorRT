@@ -1,4 +1,4 @@
-FROM pytorch/pytorch:2.12.1-cuda12.6-cudnn9-devel
+FROM pytorch/pytorch:2.13.0-cuda13.0-cudnn9-devel
 
 ARG DEBIAN_FRONTEND=noninteractive
 
@@ -32,8 +32,8 @@ USER $USER
 WORKDIR /home/$USER 
 
 RUN sudo apt install -y python3-pip
-RUN pip3 install --break-system-packages transformers onnx onnxruntime
+RUN pip3 install --break-system-packages transformers
 RUN pip3 install --break-system-packages opencv-python-headless
-RUN pip3 install --break-system-packages onnxscript
+RUN pip3 install --break-system-packages torch-tensorrt
 
 RUN echo 'export PS1="\[$(tput setaf 2; tput bold)\]\u\[$(tput setaf 7)\]@\[$(tput setaf 3)\]\h\[$(tput setaf 7)\]:\[$(tput setaf 4)\]\W\[$(tput setaf 7)\]$ \[$(tput sgr0)\]"' >> ~/.bashrc
