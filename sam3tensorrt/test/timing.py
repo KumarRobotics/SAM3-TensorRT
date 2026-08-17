@@ -5,7 +5,7 @@ Runs 1-10 text prompts, 3 warmup + 10 measured runs each, reports min/max/avg.
 Usage:
     python3 timing_ultralytics.py --model sam3.pt --image test/test.png
 """
-
+import cv2
 import argparse
 import time
 import numpy as np
@@ -14,7 +14,7 @@ import torchvision
 import logging
 
 # Suppress all INFO and DEBUG messages from Ultralytics
-logging.getLogger("ultralytics").setLevel(logging.WARNING)
+logging.getLogger("ultralytics").setLevel(logging.ERROR)
 
 ALL_TEXTS = [
     "car", "building", "road", "person", "tree",
@@ -35,7 +35,7 @@ def run_benchmark(model_path: str, image_path: str) -> None:
     }
     predictor = SAM3SemanticPredictor(overrides=overrides)
 
-    predictor.set_image(image_path)
+
 
     print(f"\nModel : {model_path}")
     print(f"Image : {image_path}")
@@ -48,14 +48,19 @@ def run_benchmark(model_path: str, image_path: str) -> None:
 
         # Warmup
         for _ in range(WARMUP_RUNS):
+            img = np.random.randint(0, 256, (1536, 2048, 3), dtype=np.uint8)
+            predictor.set_image(img)
             predictor(text=texts)
 
         # Measured runs — only timing the predict call, not image encoding
         times = []
         for _ in range(MEASURE_RUNS):
+            img = np.random.randint(0, 256, (1536, 2048, 3), dtype=np.uint8)
             t0 = time.perf_counter()
-            predictor(text=texts)
+            predictor.set_image(img)
             times.append((time.perf_counter() - t0) * 1000.0)
+            predictor(text=texts)
+
 
         times = np.array(times)
         print(f"  {n:<12}{times.min():<14.2f}{times.max():<14.2f}{times.mean():<14.2f}")

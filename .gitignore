@@ -3,6 +3,7 @@
 **/*.onnx
 **/*.data
 **/*.plan
+**/*.engine
 **/*.zip
 **/__pycache__
 **/build
