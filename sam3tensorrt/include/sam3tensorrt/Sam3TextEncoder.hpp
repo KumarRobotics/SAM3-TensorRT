@@ -6,7 +6,8 @@
 #include <cuda_runtime.h>
 
 struct Sam3TextFeatures {
-    float* text_embeddings;  // [1, 32, 256] float32
+    float* text_features;  // [1, 32, 256] float32
+    float* text_embeddings; // [1, 32, 1024] float32
 };
 
 /**
@@ -24,20 +25,19 @@ class Sam3TextEncoder : public Sam3ModelBase
 
         /**
          * Non-blocking forward pass.
-         * @param d_input_ids       input_ids on device -- [1, 32] int32.
-         *                          Owned and written by Sam3Preprocessor.
-         * @param d_attention_mask  attention_mask on device -- [1, 32] int32.
-         *                          Owned and written by Sam3Preprocessor.
-         * @param stream            CUDA stream owned by Sam3Model.
-         * @return                  Device pointer to text_embeddings [1, 32, 256].
-         *                          Caller syncs the stream before reading. */
-        Sam3TextFeatures encode(const int32_t* d_input_ids,
-                                const int32_t* d_attention_mask,
-                                cudaStream_t stream);
+         * @param d_input_ids input_ids on device -- [1, 32] int32.
+         * Owned and written by Sam3Preprocessor.
+         * @param d_attention_mask attention_mask on device -- [1, 32] int32.
+         * Owned and written by Sam3Preprocessor.
+         * @param stream CUDA stream owned by Sam3Model.
+         * @return Device pointer to text_embeddings [1, 32, 256].
+         * Caller syncs the stream before reading. */
+        Sam3TextFeatures encode(const int32_t* d_input_ids, const int32_t* d_attention_mask, cudaStream_t stream);
 
     private:
         void discoverAndAllocate();
 
+        float* d_text_features_ = nullptr;
         float* d_text_embeddings_ = nullptr;
 
         Sam3TextFeatures features_{};

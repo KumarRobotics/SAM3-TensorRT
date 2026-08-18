@@ -10,23 +10,23 @@
 
 Sam3Model::Config Sam3Model::loadConfig(const std::string& path) {
     std::ifstream file(path);
-    if (!file)
+    if (!file) {
         throw std::runtime_error("Sam3Model: cannot open config: " + path);
- 
+    }
+
     Json::Value  root;
     Json::Reader reader;
-    if (!reader.parse(file, root))
-        throw std::runtime_error(
-            "Sam3Model: failed to parse config: " +
-            reader.getFormattedErrorMessages());
+    if (!reader.parse(file, root)) {
+        throw std::runtime_error("Sam3Model: failed to parse config: " + reader.getFormattedErrorMessages());
+    }
  
     Config cfg;
-    cfg.presence_threshold   = root["presence_threshold"].asFloat();
+    cfg.presence_threshold = root["presence_threshold"].asFloat();
     cfg.confidence_threshold = root["confidence_threshold"].asFloat();
-    cfg.image_size           = root["image_size"].asInt();
-    cfg.text_padding         = root["text_padding"].asInt();
-    cfg.max_img_h            = root["max_img_h"].asInt();
-    cfg.max_img_w            = root["max_img_w"].asInt();
+    cfg.image_size = root["image_size"].asInt();
+    cfg.text_padding = root["text_padding"].asInt();
+    cfg.max_img_h = root["max_img_h"].asInt();
+    cfg.max_img_w = root["max_img_w"].asInt();
  
     const Json::Value mean = root["image_mean"];
     const Json::Value std  = root["image_std"];
@@ -42,20 +42,22 @@ Sam3Processor::Params Sam3Model::processorParams(const Config& cfg) {
     Sam3Processor::Params p;
     p.image_size   = cfg.image_size;
     p.text_padding = cfg.text_padding;
+
     for (int i = 0; i < 3; ++i) {
         p.image_mean[i] = cfg.image_mean[i];
         p.image_std[i]  = cfg.image_std[i];
     }
+    
     return p;
 }
 
 Sam3Model::Sam3Model(const std::string& models_path, const std::string& merges_path, const std::string& vocab_path, const std::string& config_path) :
     config_(loadConfig(config_path)),
-    image_encoder_(models_path + "/image_encoder.plan"),
-    text_encoder_ (models_path + "/text_encoder.plan"),
-    mask_decoder_ (models_path + "/mask_decoder.plan"),
-    processor_ (merges_path, vocab_path, processorParams(config_)),
-    h_logits_ (MAX_SLOTS),
+    image_encoder_(models_path + "/image_encoder_fp16.engine"),
+    text_encoder_(models_path + "/text_encoder_fp16.engine"),
+    mask_decoder_(models_path + "/mask_decoder_fp16.engine"),
+    processor_(merges_path, vocab_path, processorParams(config_)),
+    h_logits_(MAX_SLOTS),
     h_presence_(1)
 {
     cudaStreamCreate(&img_stream_);
@@ -99,13 +101,12 @@ std::vector<Detection> Sam3Model::forward(
 
     cudaStreamSynchronize(inference_stream_);
 
-    cudaMemcpy(h_logits_.data(),   output.predicted_logits,
-               MAX_SLOTS * sizeof(float), cudaMemcpyDeviceToHost);
-    cudaMemcpy(h_presence_.data(), output.presence_logits,
-               sizeof(float), cudaMemcpyDeviceToHost);
+    cudaMemcpy(h_logits_.data(), output.predicted_logits, MAX_SLOTS * sizeof(float), cudaMemcpyDeviceToHost);
+    cudaMemcpy(h_presence_.data(), output.presence_logits, sizeof(float), cudaMemcpyDeviceToHost);
 
-    if (h_presence_[0] < config_.presence_threshold)
+    if (h_presence_[0] < config_.presence_threshold) {
         return {};
+    }
 
     std::vector<int>   surviving_indices;
     std::vector<float> surviving_confidences;
