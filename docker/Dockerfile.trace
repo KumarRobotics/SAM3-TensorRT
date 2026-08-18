@@ -34,6 +34,9 @@ WORKDIR /home/$USER
 RUN sudo apt install -y python3-pip
 RUN pip3 install --no-deps opencv-python-headless ultralytics
 
+#apply torch_tensorrt patch
+RUN sed -i 's/^\(\s*\)if attn_bias\.dtype == trt\.DataType\.BOOL:/\1attn_bias = get_trt_tensor(ctx, attn_bias, name + "_attn_bias")\n\1if attn_bias.dtype == trt.DataType.BOOL:/' \
+    /usr/local/lib/python3.12/dist-packages/torch_tensorrt/dynamo/conversion/impl/attention.py
  
  
 RUN echo 'export PS1="\[$(tput setaf 2; tput bold)\]\u\[$(tput setaf 7)\]@\[$(tput setaf 3)\]\h\[$(tput setaf 7)\]:\[$(tput setaf 4)\]\W\[$(tput setaf 7)\]$ \[$(tput sgr0)\]"' >> ~/.bashrc
