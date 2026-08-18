@@ -3,6 +3,7 @@ import cv2
 import copy
 import torch
 import argparse
+import numpy as np
 import torch_tensorrt
 from ultralytics.models.sam import SAM3SemanticPredictor
 
@@ -212,6 +213,29 @@ def _construct_model(fp16 : bool) -> SAM3SemanticPredictor:
 
     return SAM3SemanticPredictor(overrides=overrides)
 
+
+def export_and_verify_image_encoder(predictor : SAM3SemanticPredictor, fp16 : bool, img : np.ndarray) -> None:
+    predictor.setup_source(img)
+    
+    patch_rope(predictor.model)
+    
+    torch_output = _verify_wrapper(predictor, img)
+
+    precision = "fp16" if fp16 else "fp32"
+    engine_path = os.path.join(os.environ["HOME"], "models", f"image_encoder_{precision}.engine")
+    #_ = trace_and_export_image_encoder(
+    #    predictor.model,
+    #    img,
+    #    engine_path,
+    #    fp16
+    #)
+
+    for batch in predictor.dataset:
+        im = predictor.preprocess(batch[1])
+        break
+    _verify_engine(engine_path, im, torch_output, min_cos=0.999 if fp16 else 0.9999)
+
+    return torch_output
 
 if __name__ == "__main__":
 

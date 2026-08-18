@@ -7,7 +7,7 @@ import torch_tensorrt
 import tensorrt as trt
 from ultralytics.models.sam import SAM3SemanticPredictor
 
-from typing import Tuple, Any
+from typing import Tuple, List, Any
 
 _TRT_TO_TORCH = {
     trt.float32: torch.float32,
@@ -172,6 +172,23 @@ def _construct_model(fp16 : bool) -> SAM3SemanticPredictor:
     )
 
     return SAM3SemanticPredictor(overrides=overrides)
+
+def export_and_verify_text_encoder(predictor : SAM3SemanticPredictor, fp16 : bool, captions : List[str]) -> None:
+    tokenizer = predictor.model.backbone.language_backbone.tokenizer
+    ctx = predictor.model.backbone.language_backbone.context_length
+
+    input_ids = tokenizer(captions, context_length=ctx).to(DEVICE)
+    attention_mask = (input_ids != 0).bool().ne(1)
+
+    torch_output = _verify_wrapper(predictor, captions)
+
+    precision = "fp16" if fp16 else "fp32"
+    engine_path = os.path.join(os.environ["HOME"], "models", f"text_encoder_{precision}.engine")
+    #trace_and_export_text_encoder(predictor.model, (input_ids, attention_mask), engine_path, args.fp16)
+
+    _verify_engine(engine_path, (input_ids, attention_mask), (torch_output[0], torch_output[2]), 0.999 if fp16 else 0.9999)
+
+    return torch_output
 
 if __name__ == "__main__":
     captions = ["road"]

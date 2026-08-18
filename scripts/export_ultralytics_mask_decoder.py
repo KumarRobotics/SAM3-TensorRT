@@ -158,12 +158,15 @@ def time_model(predictor, image):
         print("time: ", end - start)
 
 @torch.inference_mode()
-def _verify_wrapper(model : torch.nn.Module, input : Tuple[torch.Tensor], img : np.ndarray, captions : List[str]):
+def _verify_wrapper(predictor : SAM3SemanticPredictor, input : Tuple[torch.Tensor], img : np.ndarray, captions : List[str]):
     """Compare DecoderWrapper against the stock predictor Results."""
-    decoder_wrapper = MaskDecoderWrapper(model)
+    decoder_wrapper = MaskDecoderWrapper(predictor.model)
     predictor.set_image(img)
-    ref = predictor(text=captions)[0]
-    
+    ref = predictor(text=captions)[0] 
+    for batch in predictor.dataset:
+        im = predictor.preprocess(batch[1])
+        break
+
     pred_logits, pred_boxes, _, presence, pred_masks = decoder_wrapper(*input)
 
     preds = {
@@ -254,8 +257,8 @@ def trace_and_export_mask_deocder(model : torch.nn.Module, input : Any, engine_p
             device=torch_tensorrt.Device("cuda:0"),
     )
 
-    with open(engine_path, "wb") as f:
-        f.write(engine_bytes)
+    #with open(engine_path, "wb") as f:
+    #    f.write(engine_bytes)
 
     return torch_output 
 
@@ -367,6 +370,25 @@ def _construct_model(fp16 : bool) -> SAM3SemanticPredictor:
 
     return SAM3SemanticPredictor(overrides=overrides)
 
+def export_and_verify_mask_decoder(predictor : SAM3SemanticPredictor, input : Tuple[torch.Tensor], fp16 : bool, img : np.ndarray, captions : List[str]) -> None:
+
+    torch_output = _verify_wrapper(predictor, input, img, captions)
+
+    precision =  "fp16" if fp16 else "fp32"
+    engine_path = os.path.join(os.environ["HOME"], "models", f"mask_decoder_{precision}.engine")
+    #trace_and_export_mask_deocder(
+    #    predictor.model, 
+    #    input,
+    #    engine_path,
+    #    fp16
+    #)
+    predictor.set_image(img)
+    ref = predictor(text=captions)[0] 
+    for batch in predictor.dataset:
+        im = predictor.preprocess(batch[1])
+        break
+    _verify_engine(engine_path, input, predictor, im, img, captions)
+
 
 if __name__ == "__main__":
     from export_ultralytics_image_encoder import ImageEncoderWrapper
@@ -404,7 +426,7 @@ if __name__ == "__main__":
     txt_masks_f = torch.zeros_like(txt_masks, dtype=txt_feats.dtype).masked_fill_(txt_masks, NEG)
 
     input = img_encoder_input + (txt_feats, txt_masks, txt_masks_f)
-    torch_output = _verify_wrapper(predictor.model, input, img, captions)
+    torch_output = _verify_wrapper(predictor, input, img, captions)
 
     del image_encoder_wrapper, text_encoder_wrapper
     precision =  "fp16" if args.fp16 else "fp32"
