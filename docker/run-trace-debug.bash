@@ -4,6 +4,7 @@ xhost +
 docker run -it --rm \
     --network=host \
     --gpus all \
+    --ipc=host \
     -v "/tmp/.X11-unix:/tmp/.X11-unix" \
     -v "`pwd`/../models:/home/`whoami`/models" \
     -v "`pwd`/../scripts:/home/`whoami`/scripts" \

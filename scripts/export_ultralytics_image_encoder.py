@@ -32,7 +32,7 @@ class ImageEncoderWrapper(torch.nn.Module):
         output = self.backbone.forward_image(pixel_values)
         fpn = output["backbone_fpn"]     # list of 4 (B, C, H, W)
         pos = output["vision_pos_enc"]   # list of 4 (B, C', H, W)
-        return fpn[0], fpn[1], fpn[2],  pos[0], pos[1], pos[2]
+        return fpn[0], fpn[1], fpn[2], pos[0], pos[1], pos[2]
 
 def _apply_rope_real(self, q, k):
     def rope(x):
@@ -55,6 +55,25 @@ def patch_rope(model):
     type(blocks[0].attn)._apply_rope = _apply_rope_real
 
 
+class FP32LayerNorm(torch.nn.LayerNorm):
+    def forward(self, x):
+        return torch.nn.functional.layer_norm(
+            x.float(), self.normalized_shape, self.weight, self.bias, self.eps
+        ).to(x.dtype)
+
+def patch_layernorm(model):
+    """Make LayerNorm's fp32 accumulation explicit so TRT can't demote it."""
+    n = 0
+    for mod in model.modules():
+        for name, child in list(mod.named_children()):
+            if isinstance(child, torch.nn.LayerNorm) and not isinstance(child, FP32LayerNorm):
+                new = FP32LayerNorm(child.normalized_shape, eps=child.eps,
+                                    elementwise_affine=child.elementwise_affine)
+                new.load_state_dict(child.state_dict())
+                new.to(child.weight.device, torch.float32)
+                setattr(mod, name, new)
+                n += 1
+    print(f"patched {n} LayerNorms")
 
 @torch.inference_mode
 def trace_and_export_image_encoder(model : torch.nn.Module, input : Any, engine_path : str, fp16 : bool) -> Tuple[torch.Tensor]: 
@@ -77,8 +96,8 @@ def trace_and_export_image_encoder(model : torch.nn.Module, input : Any, engine_
         exp_program,
         arg_inputs=[input],
         optimization_level=5,
-        #use_explicit_typing=True,
-        enabled_precisions={dtype, torch.float32},
+        use_explicit_typing=True,
+        #enabled_precisions={dtype, torch.float32},
         device=torch_tensorrt.Device(f"cuda:{input.device.index or 0}"),
     )
 
@@ -170,17 +189,6 @@ def _verify_engine(engine_path: str, input: torch.Tensor, torch_output: Tuple[to
     for i, t in enumerate(torch_output):
         print("torch", i, "absmax:", t.float().abs().max().item())
     print(f"engine {'MATCHES' if ok else 'DIFFERS FROM'} torch within min_cos={min_cos}")
-
-    model_fp32 = copy.deepcopy(predictor.model).float()
-    ref32 = ImageEncoderWrapper(model_fp32).eval()(im.float())
-
-    def cos(a, b):
-        return torch.nn.functional.cosine_similarity(a.float().flatten(), b.float().flatten(), dim=0).item()
-
-    for i in range(3):
-        print(f"[{i}] torch_fp16 vs fp32: {cos(ref32[i], torch_output[i]):.6f}   "
-              f"trt_fp16 vs fp32: {cos(ref32[i], trt_out[i]):.6f}")
-
     return ok
 
 def _construct_model(fp16 : bool) -> SAM3SemanticPredictor:
@@ -218,16 +226,17 @@ if __name__ == "__main__":
     predictor.setup_source(img)
     
     patch_rope(predictor.model)
+    #patch_layernorm(predictor.model)
     torch_output = _verify_wrapper(predictor, img)
 
     precision = "fp16" if args.fp16 else "fp32"
     engine_path = os.path.join(os.environ["HOME"], "models", f"image_encoder_{precision}.engine")
-    #_ = trace_and_export_image_encoder(
-    #    predictor.model,
-    #    img,
-    #    engine_path,
-    #    args.fp16
-    #)
+    _ = trace_and_export_image_encoder(
+        predictor.model,
+        img,
+        engine_path,
+        args.fp16
+    )
 
     for batch in predictor.dataset:
         im = predictor.preprocess(batch[1])
