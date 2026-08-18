@@ -9,8 +9,9 @@ Sam3ImageEncoder::Sam3ImageEncoder(const std::string& plan_path) : Sam3ModelBase
     discoverAndAllocate();
 }
 
-Sam3ImageEncoder::~Sam3ImageEncoder() {
-    for (int i = 0; i < 4; ++i) {
+Sam3ImageEncoder::~Sam3ImageEncoder() 
+{
+    for (int i = 0; i < 3; ++i) {
         cudaFree(d_fpn_[i]);
         cudaFree(d_fpn_pos_[i]);
     }
@@ -23,24 +24,36 @@ void Sam3ImageEncoder::discoverAndAllocate()
     for (int i = 0; i < n; ++i) {
         const char* name = engine_->getIOTensorName(i);
 
-        if (engine_->getTensorIOMode(name) == nvinfer1::TensorIOMode::kINPUT)
+        if (engine_->getTensorIOMode(name) == nvinfer1::TensorIOMode::kINPUT) {
             continue;  // pixel_values
+        }
 
         const std::string sname(name);
-        const bool is_pos = sname.rfind("pos_", 0) == 0;
-        const int  idx    = sname.back() - '0';
-
-        if (idx < 0 || idx > 3)
+        const std::string prefix = "output";
+        if (sname.rfind(prefix, 0) != 0) {
             throw std::runtime_error("Sam3ImageEncoder: unexpected output tensor: " + sname);
+        }
+ 
+        const int output_num = std::stoi(sname.substr(prefix.size()));
+ 
+        // output0-2 are FPN features, output3-5 are the corresponding position encodings
+        const bool is_pos = output_num >= 3;
+        const int idx = is_pos ? output_num - 3 : output_num;
+
+        if (idx < 0 || idx > 2) {
+            throw std::runtime_error("Sam3ImageEncoder: unexpected output tensor: " + sname);
+        }
 
         nvinfer1::Dims dims = engine_->getTensorShape(name);
         size_t count = 1;
-        for (int d = 0; d < dims.nbDims; ++d)
+        for (int d = 0; d < dims.nbDims; ++d) {
             count *= static_cast<size_t>(dims.d[d]);
+        }
 
         float** slot = is_pos ? &d_fpn_pos_[idx] : &d_fpn_[idx];
-        if (cudaMalloc(slot, count * sizeof(float)) != cudaSuccess)
+        if (cudaMalloc(slot, count * sizeof(float)) != cudaSuccess) {
             throw std::runtime_error("Sam3ImageEncoder: cudaMalloc failed for " + sname);
+        }
 
         context_->setTensorAddress(name, *slot);
 
@@ -48,7 +61,7 @@ void Sam3ImageEncoder::discoverAndAllocate()
                   << " [" << count << " floats]\n";
     }
 
-    for (int i = 0; i < 4; ++i) {
+    for (int i = 0; i < 3; ++i) {
         features_.fpn[i] = d_fpn_[i];
         features_.fpn_pos[i] = d_fpn_pos_[i];
     }

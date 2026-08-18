@@ -6,8 +6,8 @@
 
 struct Sam3ImageFeatures 
 {
-    float* fpn[4];      // fpn_0 .. fpn_3
-    float* fpn_pos[4];  // fpn_pos_0 .. fpn_pos_3
+    float* fpn[3];      // fpn_0 .. fpn_2
+    float* fpn_pos[3];  // fpn_pos_0 .. fpn_pos_2
 };
 
 class Sam3ImageEncoder : public Sam3ModelBase 
@@ -22,15 +22,15 @@ class Sam3ImageEncoder : public Sam3ModelBase
         /**
          * Non-blocking forward pass.
          * @param d_input  Preprocessed image on device — [1, 3, H, W] NCHW Owned and written by Sam3Processor.
-         * @param stream   CUDA stream owned by Sam3Model.
-         * @return         Struct of 8 device pointers. Caller syncs the stream before reading.*/
+         * @param stream  CUDA stream owned by Sam3Model.
+         * @return Struct of 8 device pointers. Caller syncs the stream before reading.*/
         Sam3ImageFeatures encode(const float* d_input, cudaStream_t stream);
 
     private:
         void discoverAndAllocate();
 
-        float* d_fpn_[4]     = {};
-        float* d_fpn_pos_[4] = {};
+        float* d_fpn_[3]     = {};
+        float* d_fpn_pos_[3] = {};
 
         Sam3ImageFeatures features_{};
 };
