@@ -92,7 +92,7 @@ std::vector<Detection> Sam3Model::forward(
         text_input.d_attention_mask,
         inference_stream_);
 
-    Sam3DecoderOutput output = mask_decoder_.decode(
+    Sam3DecoderOutput<float> output = mask_decoder_.decode(
         image_features,
         text_features,
         text_input.d_attention_mask,

@@ -1,13 +1,17 @@
 #pragma once
 
 #include "sam3tensorrt/Tokenizer.hpp"
+#include "sam3tensorrt/cuda/typing.cuh"
+#include "sam3tensorrt/cuda/normalize.cuh"
 
+#include <cuda_fp6.h>
 #include <cuda_runtime.h>
 #include <opencv2/opencv.hpp>
 
 #include <cstdint>
 #include <string>
 #include <vector>
+#include <cstring>
 
 struct Sam3ImageInput 
 {
@@ -19,7 +23,7 @@ struct Sam3TextInput
 {
     int64_t* d_input_ids; // [1, 32] int32
     bool* d_attention_mask;  // [1, 32] int32
-    float* d_attention_mask_f; // [1, 32] float
+    __half* d_attention_mask_f; // [1, 32] float
 };
 
 struct Sam3Input
@@ -68,7 +72,7 @@ class Sam3Processor
 
         void uploadImage(const cv::Mat& resized);
         void uploadOriginalSizes(int h, int w);
-        void uploadText(const std::vector<int64_t>& ids, const std::vector<uint8_t>& mask, const std::vector<float>& mask_f);
+        void uploadText(const std::vector<int64_t>& ids, const std::vector<uint8_t>& mask, const std::vector<__half>& mask_f);
 
         Params params_;
         CLIPTokenizer tokenizer_;
@@ -83,9 +87,9 @@ class Sam3Processor
 
         int64_t* h_input_ids_ = nullptr;  // pinned host 32 int32
         uint8_t* h_attention_mask_ = nullptr;  // pinned host 32 int32
-        float* h_attention_mask_f_ = nullptr;
+        __half* h_attention_mask_f_ = nullptr;
         
         int64_t* d_input_ids_ = nullptr;  // device [1, 32] int32
         bool* d_attention_mask_ = nullptr;  // device [1, 32] int32
-        float* d_attention_mask_f_ = nullptr;
+        __half* d_attention_mask_f_ = nullptr;
 };

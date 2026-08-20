@@ -6,18 +6,21 @@
 
 #include <string>
 #include <cstdint>
+#include <cuda_fp16.h>
 #include <cuda_runtime.h>
 
 /**
  * Device pointers to mask decoder outputs.
  * Owned by Sam3MaskDecoder, valid until the next decode() call or destruction.
  * Caller must sync the stream before reading.*/
-struct Sam3DecoderOutput {
-    float* predicted_logits; 
-    float* predicted_boxes;       
-    float* predicted_boxes_xyxy;  
-    float* presence_logits;       
-    float* predicted_masks;       
+template <typename T>
+struct Sam3DecoderOutput 
+{
+    T* predicted_logits; 
+    T* predicted_boxes;       
+    T* predicted_boxes_xyxy;  
+    T* presence_logits;       
+    T* predicted_masks;       
 };
 
 /**
@@ -39,20 +42,35 @@ class Sam3MaskDecoder : public Sam3ModelBase
          * @param stream CUDA stream owned by Sam3Model.
          * @return Three device pointers to decoder outputs.
          * Caller syncs the stream before reading. */
-        Sam3DecoderOutput decode(const Sam3ImageFeatures& image_features,
-                                 const Sam3TextFeatures& text_features,
-                                 const bool* d_attention_mask,
-                                 const float* d_attention_mask_f,
-                                 cudaStream_t stream);
+        Sam3DecoderOutput<float> decode(const Sam3ImageFeatures& image_features,
+                                  const Sam3TextFeatures& text_features,
+                                  const bool* d_attention_mask,
+                                  const __half* d_attention_mask_f,
+                                  cudaStream_t stream);
+
+        Sam3DecoderOutput<float> toFloat(cudaStream_t stream);
 
     private:
         void discoverAndAllocate();
 
-        float* d_predicted_logits_ = nullptr;
-        float* d_predicted_boxes_ = nullptr;
-        float* d_predicted_boxes_xyxy_ = nullptr;
-        float* d_presence_logits_ = nullptr;
-        float* d_predicted_masks_ = nullptr;
+        __half* d_predicted_logits_ = nullptr;
+        __half* d_predicted_boxes_ = nullptr;
+        __half* d_predicted_boxes_xyxy_ = nullptr;
+        __half* d_presence_logits_ = nullptr;
+        __half* d_predicted_masks_ = nullptr;
+
+        size_t predicted_logits_count_ = 0;
+        size_t predicted_boxes_count_ = 0;
+        size_t predicted_boxes_xyxy_count_ = 0;
+        size_t presence_logits_count_ = 0;
+        size_t predicted_masks_count_ = 0;
  
-        Sam3DecoderOutput output_{};
+        float* d_predicted_logits_f_ = nullptr;
+        float* d_predicted_boxes_f_ = nullptr;
+        float* d_predicted_boxes_xyxy_f_ = nullptr;
+        float* d_presence_logits_f_ = nullptr;
+        float* d_predicted_masks_f_ = nullptr;
+
+        Sam3DecoderOutput<__half> output_ {};
+        Sam3DecoderOutput<float> output_f_ {};
 };

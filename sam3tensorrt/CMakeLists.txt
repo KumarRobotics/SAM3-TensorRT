@@ -60,9 +60,9 @@ add_library(${PROJECT_NAME} STATIC
     src/Sam3ModelBase.cpp
     src/Sam3ImageEncoder.cpp
     src/Sam3TextEncoder.cpp
-    #src/Sam3MaskDecoder.cpp
+    src/Sam3MaskDecoder.cpp
     src/Sam3Processor.cpp
-    #src/Sam3Model.cpp
+    src/Sam3Model.cpp
     src/Tokenizer.cpp
 )
 

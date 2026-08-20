@@ -1,9 +1,4 @@
 #include "sam3tensorrt/Sam3Processor.hpp"
-#include "sam3tensorrt/cuda/normalize.cuh"
-
-#include <stdexcept>
-#include <cstring>
-#include <algorithm>
 
 Sam3Processor::Sam3Processor(const std::string& merges_path,const std::string& vocab_path, const Params& params) 
     : params_(params), tokenizer_(merges_path, vocab_path)
@@ -48,11 +43,11 @@ void Sam3Processor::allocateBuffers()
 
     cudaMallocHost(&h_input_ids_, txt_len * sizeof(int64_t));
     cudaMallocHost(&h_attention_mask_, txt_len * sizeof(uint8_t));
-    cudaMallocHost(&h_attention_mask_f_, txt_len * sizeof(float));
+    cudaMallocHost(&h_attention_mask_f_, txt_len * sizeof(__half));
  
     cudaMalloc(&d_input_ids_, txt_len * sizeof(int64_t));
     cudaMalloc(&d_attention_mask_, txt_len * sizeof(bool));
-    cudaMalloc(&d_attention_mask_f_, txt_len * sizeof(float));
+    cudaMalloc(&d_attention_mask_f_, txt_len * sizeof(__half));
 }
 
 void Sam3Processor::uploadImage(const cv::Mat& resized)
@@ -71,17 +66,17 @@ void Sam3Processor::uploadOriginalSizes(int h, int w)
     cudaMemcpyAsync(d_original_sizes_, h_original_sizes_, 2 * sizeof(int32_t), cudaMemcpyHostToDevice, stream_);
 }
 
-void Sam3Processor::uploadText(const std::vector<int64_t>& ids, const std::vector<uint8_t>& mask, const std::vector<float>& mask_f) 
+void Sam3Processor::uploadText(const std::vector<int64_t>& ids, const std::vector<uint8_t>& mask, const std::vector<__half>& mask_f) 
 {
     const int len = params_.text_padding;
 
     std::memcpy(h_input_ids_, ids.data(),  len * sizeof(int64_t));
     std::memcpy(h_attention_mask_, mask.data(), len * sizeof(uint8_t));
-    std::memcpy(h_attention_mask_f_, mask_f.data(), len * sizeof(float)); 
+    std::memcpy(h_attention_mask_f_, mask_f.data(), len * sizeof(__half)); 
 
     cudaMemcpyAsync(d_input_ids_, h_input_ids_, len * sizeof(int64_t), cudaMemcpyHostToDevice, stream_);
     cudaMemcpyAsync(d_attention_mask_, h_attention_mask_, len * sizeof(uint8_t), cudaMemcpyHostToDevice, stream_);
-    cudaMemcpyAsync(d_attention_mask_f_, h_attention_mask_f_, len * sizeof(float), cudaMemcpyHostToDevice, stream_);
+    cudaMemcpyAsync(d_attention_mask_f_, h_attention_mask_f_, len * sizeof(__half), cudaMemcpyHostToDevice, stream_);
 }
 
 Sam3ImageInput Sam3Processor::preprocessImage(const cv::Mat& image)
@@ -121,12 +116,12 @@ Sam3TextInput Sam3Processor::preprocessText(const std::string& text)
 
     std::vector<int64_t> ids(len, 0);
     std::vector<uint8_t> mask(len, 0);
-    std::vector<float> mask_f(len, 0.0);
+    std::vector<__half> mask_f(len, __float2half(0.0f));
 
     for (int i = 0; i < real_len; ++i) {
         ids[i] = static_cast<int64_t>(raw[i]);
         mask[i] = 1;
-        mask_f[i] = 1.0f;
+        mask_f[i] = __float2half(1.0f);
     }
 
     uploadText(ids, mask, mask_f);
