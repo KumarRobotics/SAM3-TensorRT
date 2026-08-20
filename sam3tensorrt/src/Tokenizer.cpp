@@ -31,7 +31,7 @@ void CLIPTokenizer::loadMerges(const std::string& path)
     while (std::getline(f, line))
     {
         if (line.empty()) continue;
-        if (first) { first = false; continue; }  // skip "#version" header
+        if (first) { first = false; continue; }  
 
         std::istringstream ss(line);
         std::string a, b;
@@ -113,13 +113,11 @@ std::vector<int> CLIPTokenizer::tokenize(const std::string& text) const
             auto it = vocab_.find(tok);
             if (it != vocab_.end())
                 tokens.push_back(tok);
-            // unknown tokens are silently skipped (CLIP vocab is nearly complete)
         }
     }
 
     tokens.push_back("<|endoftext|>");
 
-    // 6. Convert token strings to IDs
     std::vector<int> ids;
     ids.reserve(tokens.size());
     for (const auto& tok : tokens)

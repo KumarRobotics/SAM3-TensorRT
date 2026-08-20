@@ -46,6 +46,7 @@ add_library(sam3tensorrt_cuda STATIC
   src/normalize.cu 
   src/preprocess.cu
   src/upsample.cu
+  src/typing.cu
 )
 target_include_directories(sam3tensorrt_cuda PUBLIC 
   ${CMAKE_CURRENT_SOURCE_DIR}
@@ -59,9 +60,9 @@ add_library(${PROJECT_NAME} STATIC
     src/Sam3ModelBase.cpp
     src/Sam3ImageEncoder.cpp
     src/Sam3TextEncoder.cpp
-    src/Sam3MaskDecoder.cpp
+    #src/Sam3MaskDecoder.cpp
     src/Sam3Processor.cpp
-    src/Sam3Model.cpp
+    #src/Sam3Model.cpp
     src/Tokenizer.cpp
 )
 

@@ -12,8 +12,8 @@ Sam3MaskDecoder::Sam3MaskDecoder(const std::string& plan_path) : Sam3ModelBase(p
 Sam3MaskDecoder::~Sam3MaskDecoder() 
 {
     cudaFree(d_predicted_logits_);
-    cudaFree(d_predicted_boxes_a_);
-    cudaFree(d_predicted_boxes_b_);
+    cudaFree(d_predicted_boxes_);
+    cudaFree(d_predicted_boxes_xyxy_);
     cudaFree(d_presence_logits_);
     cudaFree(d_predicted_masks_);
 }
@@ -61,16 +61,16 @@ void Sam3MaskDecoder::discoverAndAllocate()
         std::cout << "[Sam3MaskDecoder] output: " << name << " [" << count << " floats]\n";
     }
 
-    output_.predicted_logits  = d_predicted_logits_;
+    output_.predicted_logits = d_predicted_logits_;
     output_.predicted_boxes = d_predicted_boxes_;
     output_.predicted_boxes_xyxy = d_predicted_boxes_xyxy_;
-    output_.presence_logits   = d_presence_logits_;
-    output_.predicted_masks   = d_predicted_masks_;
+    output_.presence_logits = d_presence_logits_;
+    output_.predicted_masks = d_predicted_masks_;
 }
 
 Sam3DecoderOutput Sam3MaskDecoder::decode(const Sam3ImageFeatures& image_features,
                                           const Sam3TextFeatures& text_features,
-                                          const int32_t* d_attention_mask,
+                                          const bool* d_attention_mask,
                                           const float* d_txt_masks_f,
                                           cudaStream_t stream)
 {
@@ -81,10 +81,11 @@ Sam3DecoderOutput Sam3MaskDecoder::decode(const Sam3ImageFeatures& image_feature
         context_->setTensorAddress(pos_name.c_str(), image_features.fpn_pos[i]);
     }
 
+
     context_->setTensorAddress("txt_feats", text_features.text_embeddings);
 
-    context_->setTensorAddress("txt_masks", const_cast<int32_t*>(d_attention_mask));
-    context_->setTensorAddress("txt_masks_f", const_cast<void*>(d_txt_masks_f));
+    context_->setTensorAddress("txt_masks", const_cast<bool*>(d_attention_mask));
+    context_->setTensorAddress("txt_masks_f", const_cast<float*>(d_txt_masks_f));
 
     if (!context_->enqueueV3(stream)) {
         throw std::runtime_error("Sam3MaskDecoder: enqueueV3 failed");

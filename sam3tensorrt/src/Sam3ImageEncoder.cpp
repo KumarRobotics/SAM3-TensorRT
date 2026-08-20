@@ -11,7 +11,10 @@ Sam3ImageEncoder::Sam3ImageEncoder(const std::string& plan_path) : Sam3ModelBase
 
 Sam3ImageEncoder::~Sam3ImageEncoder() 
 {
+    cudaFree(d_input_native_);
     for (int i = 0; i < 3; ++i) {
+        cudaFree(d_fpn_native_[i]);
+        cudaFree(d_fpn_pos_native_[i]);
         cudaFree(d_fpn_[i]);
         cudaFree(d_fpn_pos_[i]);
     }
@@ -25,7 +28,13 @@ void Sam3ImageEncoder::discoverAndAllocate()
         const char* name = engine_->getIOTensorName(i);
 
         if (engine_->getTensorIOMode(name) == nvinfer1::TensorIOMode::kINPUT) {
-            continue;  // pixel_values
+            input_dtype_ = engine_->getTensorDataType(name);
+            input_count_ = tensorCount(engine_->getTensorShape(name));
+
+            if (cudaMalloc(&d_input_native_, input_count_ * dtypeSize(input_dtype_)) != cudaSuccess) {
+                throw std::runtime_error("Sam3ImageEncoder: cudaMalloc failed for pixel_values");
+            }
+            continue;
         }
 
         const std::string sname(name);
@@ -44,22 +53,33 @@ void Sam3ImageEncoder::discoverAndAllocate()
             throw std::runtime_error("Sam3ImageEncoder: unexpected output tensor: " + sname);
         }
 
-        nvinfer1::Dims dims = engine_->getTensorShape(name);
-        size_t count = 1;
-        for (int d = 0; d < dims.nbDims; ++d) {
-            count *= static_cast<size_t>(dims.d[d]);
-        }
+        nvinfer1::DataType dt = engine_->getTensorDataType(name);
+        size_t count = tensorCount(engine_->getTensorShape(name));
 
-        float** slot = is_pos ? &d_fpn_pos_[idx] : &d_fpn_[idx];
-        if (cudaMalloc(slot, count * sizeof(float)) != cudaSuccess) {
+        void** native_slot = is_pos ? &d_fpn_pos_native_[idx] : &d_fpn_native_[idx];
+        __half** float_slot = is_pos ? &d_fpn_pos_[idx] : &d_fpn_[idx];
+        nvinfer1::DataType* dtype_slot = is_pos ? &fpn_pos_dtype_[idx] : &fpn_dtype_[idx];
+        size_t* count_slot = is_pos ? &fpn_pos_count_[idx] : &fpn_count_[idx];
+
+        *dtype_slot = dt;
+        *count_slot = count;
+
+        // Native buffer
+        if (cudaMalloc(native_slot, count * dtypeSize(dt)) != cudaSuccess) {
             throw std::runtime_error("Sam3ImageEncoder: cudaMalloc failed for " + sname);
         }
+        // Float buffer
+        if (cudaMalloc(float_slot, count * sizeof(float)) != cudaSuccess) {
+            throw std::runtime_error("Sam3ImageEncoder: cudaMalloc failed for " + sname + " (float)");
+        }
 
-        context_->setTensorAddress(name, *slot);
+        context_->setTensorAddress(name, *native_slot);
 
         std::cout << "[Sam3ImageEncoder] output: " << name
-                  << " [" << count << " floats]\n";
+                  << " [" << count << " elements, native dtype size " << dtypeSize(dt) << "B]\n";
     }
+
+    context_->setTensorAddress("pixel_values", d_input_native_);
 
     for (int i = 0; i < 3; ++i) {
         features_.fpn[i] = d_fpn_[i];
@@ -69,7 +89,7 @@ void Sam3ImageEncoder::discoverAndAllocate()
 
 Sam3ImageFeatures Sam3ImageEncoder::encode(const float* d_input, cudaStream_t stream) 
 {
-    context_->setTensorAddress("pixel_values", const_cast<float*>(d_input));
+    convertToNative(d_input, d_input_native_, input_count_, input_dtype_, stream);
 
     if (!context_->enqueueV3(stream)) {
         throw std::runtime_error("Sam3ImageEncoder: enqueueV3 failed");

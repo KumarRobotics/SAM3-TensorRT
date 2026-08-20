@@ -17,8 +17,9 @@ struct Sam3ImageInput
 
 struct Sam3TextInput 
 {
-    int32_t* d_input_ids; // [1, 32] int32
-    int32_t* d_attention_mask;  // [1, 32] int32
+    int64_t* d_input_ids; // [1, 32] int32
+    bool* d_attention_mask;  // [1, 32] int32
+    float* d_attention_mask_f; // [1, 32] float
 };
 
 struct Sam3Input
@@ -49,15 +50,15 @@ class Sam3Processor
          * Resize to [644,644] on CPU, upload to GPU, normalize in CUDA.
          * Captures original image dimensions for the mask decoder.
          *
-         * @param image  BGR uint8 cv::Mat, any resolution.
-         * @return       Device pointers valid until the next preprocessImage() call*/
+         * @param image BGR uint8 cv::Mat, any resolution.
+         * @return Device pointers valid until the next preprocessImage() call*/
         Sam3ImageInput preprocessImage(const cv::Mat& image);
 
         /**
          * Tokenize, pad to 32, upload to GPU.
          *
-         * @param text  Raw input string.
-         * @return      Device pointers valid until the next preprocessText() call.*/
+         * @param text Raw input string.
+         * @return Device pointers valid until the next preprocessText() call.*/
         Sam3TextInput preprocessText(const std::string& text);
 
         Sam3Input preprocess(const cv::Mat& image, const std::vector<std::string>& texts);
@@ -67,7 +68,7 @@ class Sam3Processor
 
         void uploadImage(const cv::Mat& resized);
         void uploadOriginalSizes(int h, int w);
-        void uploadText(const std::vector<int32_t>& ids, const std::vector<int32_t>& mask);
+        void uploadText(const std::vector<int64_t>& ids, const std::vector<uint8_t>& mask, const std::vector<float>& mask_f);
 
         Params params_;
         CLIPTokenizer tokenizer_;
@@ -80,8 +81,11 @@ class Sam3Processor
         int32_t* h_original_sizes_ = nullptr; // pinned host [2] int32
         int32_t* d_original_sizes_ = nullptr; // device [1, 2] int32
 
-        int32_t* h_input_ids_ = nullptr;  // pinned host 32 int32
-        int32_t* h_attention_mask_ = nullptr;  // pinned host 32 int32
-        int32_t* d_input_ids_ = nullptr;  // device [1, 32] int32
-        int32_t* d_attention_mask_ = nullptr;  // device [1, 32] int32
+        int64_t* h_input_ids_ = nullptr;  // pinned host 32 int32
+        uint8_t* h_attention_mask_ = nullptr;  // pinned host 32 int32
+        float* h_attention_mask_f_ = nullptr;
+        
+        int64_t* d_input_ids_ = nullptr;  // device [1, 32] int32
+        bool* d_attention_mask_ = nullptr;  // device [1, 32] int32
+        float* d_attention_mask_f_ = nullptr;
 };

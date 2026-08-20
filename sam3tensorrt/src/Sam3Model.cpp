@@ -96,7 +96,7 @@ std::vector<Detection> Sam3Model::forward(
         image_features,
         text_features,
         text_input.d_attention_mask,
-        image_input.d_original_sizes,
+        text_input.d_attention_mask_f,
         inference_stream_);
 
     cudaStreamSynchronize(inference_stream_);
@@ -187,10 +187,10 @@ Sam3Result Sam3Model::infer(const cv::Mat& image, const std::vector<std::string>
 
     std::vector<Detection> all_detections;
     for (int i = 0; i < static_cast<int>(texts.size()); ++i) {
-        auto dets = forward(image_features, image_input,
-                              texts[i], i, orig_h, orig_w);
-        for (auto& d : dets)
+        auto dets = forward(image_features, image_input, texts[i], i, orig_h, orig_w);
+        for (auto& d : dets) {
             all_detections.push_back(std::move(d));
+        }
     }
 
     return Sam3Result{

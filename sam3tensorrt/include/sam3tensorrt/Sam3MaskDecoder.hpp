@@ -41,7 +41,7 @@ class Sam3MaskDecoder : public Sam3ModelBase
          * Caller syncs the stream before reading. */
         Sam3DecoderOutput decode(const Sam3ImageFeatures& image_features,
                                  const Sam3TextFeatures& text_features,
-                                 const int32_t* d_attention_mask,
+                                 const bool* d_attention_mask,
                                  const float* d_attention_mask_f,
                                  cudaStream_t stream);
 

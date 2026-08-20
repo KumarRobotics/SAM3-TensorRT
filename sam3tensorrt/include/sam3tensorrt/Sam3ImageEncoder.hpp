@@ -2,12 +2,13 @@
 
 #include "sam3tensorrt/Sam3ModelBase.hpp"
 
+#include <cuda_fp16.h>
 #include <cuda_runtime.h>
 
 struct Sam3ImageFeatures 
 {
-    float* fpn[3];      // fpn_0 .. fpn_2
-    float* fpn_pos[3];  // fpn_pos_0 .. fpn_pos_2
+    __half* fpn[3];      // fpn_0 .. fpn_2
+    __half* fpn_pos[3];  // fpn_pos_0 .. fpn_pos_2
 };
 
 class Sam3ImageEncoder : public Sam3ModelBase 
@@ -28,9 +29,22 @@ class Sam3ImageEncoder : public Sam3ModelBase
 
     private:
         void discoverAndAllocate();
+        
+        void* d_input_native_ = nullptr;
+        void* d_fpn_native_[3] = {};
+        void* d_fpn_pos_native_[3] = {};
+ 
+        nvinfer1::DataType input_dtype_ = nvinfer1::DataType::kFLOAT;
+        nvinfer1::DataType fpn_dtype_[3] = {};
+        nvinfer1::DataType fpn_pos_dtype_[3] = {};
+ 
+        size_t input_count_ = 0;
+        size_t fpn_count_[3] = {};
+        size_t fpn_pos_count_[3] = {};
 
-        float* d_fpn_[3]     = {};
-        float* d_fpn_pos_[3] = {};
+        // float precision output
+        __half* d_fpn_[3] = {};
+        __half* d_fpn_pos_[3] = {};
 
         Sam3ImageFeatures features_{};
 };
