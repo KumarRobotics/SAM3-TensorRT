@@ -58,8 +58,8 @@ def run_benchmark(model_path: str, image_path: str) -> None:
             img = np.random.randint(0, 256, (1536, 2048, 3), dtype=np.uint8)
             t0 = time.perf_counter()
             predictor.set_image(img)
-            times.append((time.perf_counter() - t0) * 1000.0)
             predictor(text=texts)
+            times.append((time.perf_counter() - t0) * 1000.0)
 
 
         times = np.array(times)

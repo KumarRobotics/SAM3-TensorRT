@@ -39,6 +39,8 @@ class Sam3MaskDecoder : public Sam3ModelBase
          * Non-blocking forward pass of model.
          * @param image_features FPN features + positional encodings from Sam3ImageEncoder.
          * @param text_features Text embeddings from Sam3TextEncoder.
+         * @param d_attention_mask txt_masks padding mask -- [1, 32] bool. 1 = pad, 0 = real token.
+         * @param d_attention_mask_f Same as d_attention_mask, as float16.
          * @param stream CUDA stream owned by Sam3Model.
          * @return Three device pointers to decoder outputs.
          * Caller syncs the stream before reading. */

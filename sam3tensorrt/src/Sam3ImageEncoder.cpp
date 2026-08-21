@@ -9,12 +9,10 @@ Sam3ImageEncoder::Sam3ImageEncoder(const std::string& plan_path) : Sam3ModelBase
     discoverAndAllocate();
 }
 
-Sam3ImageEncoder::~Sam3ImageEncoder() 
+Sam3ImageEncoder::~Sam3ImageEncoder()
 {
     cudaFree(d_input_native_);
     for (int i = 0; i < 3; ++i) {
-        cudaFree(d_fpn_native_[i]);
-        cudaFree(d_fpn_pos_native_[i]);
         cudaFree(d_fpn_[i]);
         cudaFree(d_fpn_pos_[i]);
     }
@@ -54,29 +52,27 @@ void Sam3ImageEncoder::discoverAndAllocate()
         }
 
         nvinfer1::DataType dt = engine_->getTensorDataType(name);
+        if (dt != nvinfer1::DataType::kHALF) {
+            // Sam3ImageFeatures hands the decoder raw fp16 pointers with no
+            // conversion step, so a non-fp16 binding here is a hard error
+            // rather than something to silently coerce.
+            throw std::runtime_error("Sam3ImageEncoder: expected fp16 binding for " + sname);
+        }
+
         size_t count = tensorCount(engine_->getTensorShape(name));
 
-        void** native_slot = is_pos ? &d_fpn_pos_native_[idx] : &d_fpn_native_[idx];
-        __half** float_slot = is_pos ? &d_fpn_pos_[idx] : &d_fpn_[idx];
-        nvinfer1::DataType* dtype_slot = is_pos ? &fpn_pos_dtype_[idx] : &fpn_dtype_[idx];
+        __half** slot = is_pos ? &d_fpn_pos_[idx] : &d_fpn_[idx];
         size_t* count_slot = is_pos ? &fpn_pos_count_[idx] : &fpn_count_[idx];
 
-        *dtype_slot = dt;
         *count_slot = count;
 
-        // Native buffer
-        if (cudaMalloc(native_slot, count * dtypeSize(dt)) != cudaSuccess) {
+        if (cudaMalloc(slot, count * sizeof(__half)) != cudaSuccess) {
             throw std::runtime_error("Sam3ImageEncoder: cudaMalloc failed for " + sname);
         }
-        // Float buffer
-        if (cudaMalloc(float_slot, count * sizeof(float)) != cudaSuccess) {
-            throw std::runtime_error("Sam3ImageEncoder: cudaMalloc failed for " + sname + " (float)");
-        }
 
-        context_->setTensorAddress(name, *native_slot);
+        context_->setTensorAddress(name, *slot);
 
-        std::cout << "[Sam3ImageEncoder] output: " << name
-                  << " [" << count << " elements, native dtype size " << dtypeSize(dt) << "B]\n";
+        std::cout << "[Sam3ImageEncoder] output: " << name << " [" << count << " fp16 elements]\n";
     }
 
     context_->setTensorAddress("pixel_values", d_input_native_);

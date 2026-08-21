@@ -29,20 +29,15 @@ class Sam3ImageEncoder : public Sam3ModelBase
 
     private:
         void discoverAndAllocate();
-        
+
         void* d_input_native_ = nullptr;
-        void* d_fpn_native_[3] = {};
-        void* d_fpn_pos_native_[3] = {};
- 
+
         nvinfer1::DataType input_dtype_ = nvinfer1::DataType::kFLOAT;
-        nvinfer1::DataType fpn_dtype_[3] = {};
-        nvinfer1::DataType fpn_pos_dtype_[3] = {};
- 
+
         size_t input_count_ = 0;
         size_t fpn_count_[3] = {};
         size_t fpn_pos_count_[3] = {};
 
-        // float precision output
         __half* d_fpn_[3] = {};
         __half* d_fpn_pos_[3] = {};
 

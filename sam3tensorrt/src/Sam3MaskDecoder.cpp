@@ -110,7 +110,7 @@ Sam3DecoderOutput<float> Sam3MaskDecoder::decode(const Sam3ImageFeatures& image_
     }
 
 
-    context_->setTensorAddress("txt_feats", text_features.text_embeddings);
+    context_->setTensorAddress("txt_feats", text_features.text_features);
 
     context_->setTensorAddress("txt_masks", const_cast<bool*>(d_attention_mask));
     context_->setTensorAddress("txt_masks_f", const_cast<__half*>(d_txt_masks_f));

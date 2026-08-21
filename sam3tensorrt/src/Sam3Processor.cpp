@@ -115,13 +115,13 @@ Sam3TextInput Sam3Processor::preprocessText(const std::string& text)
     const int real_len = std::min(static_cast<int>(raw.size()), len);
 
     std::vector<int64_t> ids(len, 0);
-    std::vector<uint8_t> mask(len, 0);
-    std::vector<__half> mask_f(len, __float2half(0.0f));
+    std::vector<uint8_t> mask(len, 1);
+    std::vector<__half> mask_f(len, __float2half(1.0f));
 
     for (int i = 0; i < real_len; ++i) {
         ids[i] = static_cast<int64_t>(raw[i]);
-        mask[i] = 1;
-        mask_f[i] = __float2half(1.0f);
+        mask[i] = 0;
+        mask_f[i] = __float2half(0.0f);
     }
 
     uploadText(ids, mask, mask_f);

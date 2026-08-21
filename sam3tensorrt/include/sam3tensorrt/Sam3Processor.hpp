@@ -19,11 +19,11 @@ struct Sam3ImageInput
     int32_t* d_original_sizes;  // [1, 2] int32  {height, width} before resize
 };
 
-struct Sam3TextInput 
+struct Sam3TextInput
 {
     int64_t* d_input_ids; // [1, 32] int32
-    bool* d_attention_mask;  // [1, 32] int32
-    __half* d_attention_mask_f; // [1, 32] float
+    bool* d_attention_mask;  // [1, 32] padding mask: 1 = pad, 0 = real token
+    __half* d_attention_mask_f; // [1, 32] same, as float16
 };
 
 struct Sam3Input

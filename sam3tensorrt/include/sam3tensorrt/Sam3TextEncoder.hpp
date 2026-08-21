@@ -29,8 +29,8 @@ class Sam3TextEncoder : public Sam3ModelBase
          * Non-blocking forward pass.
          * @param d_input_ids input_ids on device -- [1, 32] int32.
          * Owned and written by Sam3Preprocessor.
-         * @param d_attention_mask attention_mask on device -- [1, 32] int32.
-         * Owned and written by Sam3Preprocessor.
+         * @param d_attention_mask padding mask on device -- [1, 32] bool.
+         * 1 = pad, 0 = real token. Owned and written by Sam3Preprocessor.
          * @param stream CUDA stream owned by Sam3Model.
          * @return Device pointer to text_embeddings -- [1, 32, 256].
          * Caller syncs the stream before reading. */

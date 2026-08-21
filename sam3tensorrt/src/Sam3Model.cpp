@@ -2,10 +2,21 @@
 #include "sam3tensorrt/cuda/upsample.cuh"
 
 #include <json/json.h>
+#include <cuda_fp16.h>
 
 #include <stdexcept>
 #include <cstring>
+#include <cmath>
 #include <fstream>
+
+namespace {
+// predicted_logits / presence_logits are raw, pre-activation logits from the
+// model -- unbounded, not probabilities. They must be squashed through a
+// sigmoid before comparing against a [0,1]-scaled threshold from config.
+inline float sigmoidf(float x) {
+    return 1.0f / (1.0f + std::exp(-x));
+}
+}  // namespace
 
 
 Sam3Model::Config Sam3Model::loadConfig(const std::string& path) {
@@ -99,21 +110,27 @@ std::vector<Detection> Sam3Model::forward(
         text_input.d_attention_mask_f,
         inference_stream_);
 
-    cudaStreamSynchronize(inference_stream_);
-
+    {
+        cudaError_t err = cudaStreamSynchronize(inference_stream_);
+        if (err != cudaSuccess) {
+            std::cerr << "[CUDA ERROR] decode sync failed: " << cudaGetErrorString(err) << "\n";
+        }
+    }
     cudaMemcpy(h_logits_.data(), output.predicted_logits, MAX_SLOTS * sizeof(float), cudaMemcpyDeviceToHost);
     cudaMemcpy(h_presence_.data(), output.presence_logits, sizeof(float), cudaMemcpyDeviceToHost);
 
-    if (h_presence_[0] < config_.presence_threshold) {
+    const float presence_prob = sigmoidf(h_presence_[0]);
+    if (presence_prob < config_.presence_threshold) {
         return {};
     }
 
     std::vector<int>   surviving_indices;
     std::vector<float> surviving_confidences;
     for (int i = 0; i < MAX_SLOTS; ++i) {
-        if (h_logits_[i] >= config_.confidence_threshold) {
+        const float confidence_prob = sigmoidf(h_logits_[i]);
+        if (confidence_prob >= config_.confidence_threshold) {
             surviving_indices.push_back(i);
-            surviving_confidences.push_back(h_logits_[i]);
+            surviving_confidences.push_back(confidence_prob);
         }
     }
 
@@ -127,7 +144,12 @@ std::vector<Detection> Sam3Model::forward(
                   N, SRC_MASK_H, SRC_MASK_W,
                   orig_h, orig_w, inference_stream_);
 
-    cudaStreamSynchronize(inference_stream_);
+    {
+        cudaError_t err = cudaStreamSynchronize(inference_stream_);
+        if (err != cudaSuccess) {
+            std::cerr << "[CUDA ERROR] upsampleMasks sync failed: " << cudaGetErrorString(err) << "\n";
+        }
+    }
 
     const size_t mask_pixels = static_cast<size_t>(orig_h) * orig_w;
     std::vector<float> mask_f(mask_pixels);
@@ -174,7 +196,12 @@ Sam3Result Sam3Model::infer(const cv::Mat& image, const std::vector<std::string>
     Sam3ImageInput image_input = processor_.preprocessImage(image);
 
     Sam3ImageFeatures image_features = image_encoder_.encode(image_input.d_image, img_stream_);
-    cudaStreamSynchronize(img_stream_);
+    {
+        cudaError_t err = cudaStreamSynchronize(img_stream_);
+        if (err != cudaSuccess) {
+            std::cerr << "[CUDA ERROR] image_encoder sync failed: " << cudaGetErrorString(err) << "\n";
+        }
+    }
 
     constexpr size_t feature_size = FeatureMap::C * FeatureMap::H * FeatureMap::W;
     std::vector<float> feature_data(feature_size);
