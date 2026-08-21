@@ -46,6 +46,7 @@ add_library(sam3tensorrt_cuda STATIC
   src/normalize.cu 
   src/preprocess.cu
   src/upsample.cu
+  src/typing.cu
 )
 target_include_directories(sam3tensorrt_cuda PUBLIC 
   ${CMAKE_CURRENT_SOURCE_DIR}
@@ -63,6 +64,7 @@ add_library(${PROJECT_NAME} STATIC
     src/Sam3Processor.cpp
     src/Sam3Model.cpp
     src/Tokenizer.cpp
+    src/Visualize.cpp
 )
 
 target_link_libraries(${PROJECT_NAME} PUBLIC
@@ -72,6 +74,20 @@ target_link_libraries(${PROJECT_NAME} PUBLIC
   ${OpenCV_LIBS}
   ${JSONCPP_LIBRARIES}
   CUDA::cudart
+)
+
+add_executable(sam3 sam3.cpp)
+target_compile_definitions(sam3 PRIVATE
+    TEST_IMAGE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/test/test.png"
+    SAM3_CONFIG_DIR="${CMAKE_SOURCE_DIR}/config"
+)
+target_link_libraries(sam3 PRIVATE
+  sam3tensorrt
+  ${OpenCV_LIBS}
+)
+
+set_target_properties(sam3 PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}"
 )
 
 enable_testing()

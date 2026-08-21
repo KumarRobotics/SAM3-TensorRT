@@ -2,31 +2,42 @@
 #include "sam3tensorrt/cuda/upsample.cuh"
 
 #include <json/json.h>
+#include <cuda_fp16.h>
 
 #include <stdexcept>
 #include <cstring>
+#include <cmath>
 #include <fstream>
+
+namespace {
+// predicted_logits / presence_logits are raw, pre-activation logits from the
+// model -- unbounded, not probabilities. They must be squashed through a
+// sigmoid before comparing against a [0,1]-scaled threshold from config.
+inline float sigmoidf(float x) {
+    return 1.0f / (1.0f + std::exp(-x));
+}
+}  // namespace
 
 
 Sam3Model::Config Sam3Model::loadConfig(const std::string& path) {
     std::ifstream file(path);
-    if (!file)
+    if (!file) {
         throw std::runtime_error("Sam3Model: cannot open config: " + path);
- 
+    }
+
     Json::Value  root;
     Json::Reader reader;
-    if (!reader.parse(file, root))
-        throw std::runtime_error(
-            "Sam3Model: failed to parse config: " +
-            reader.getFormattedErrorMessages());
+    if (!reader.parse(file, root)) {
+        throw std::runtime_error("Sam3Model: failed to parse config: " + reader.getFormattedErrorMessages());
+    }
  
     Config cfg;
-    cfg.presence_threshold   = root["presence_threshold"].asFloat();
+    cfg.presence_threshold = root["presence_threshold"].asFloat();
     cfg.confidence_threshold = root["confidence_threshold"].asFloat();
-    cfg.image_size           = root["image_size"].asInt();
-    cfg.text_padding         = root["text_padding"].asInt();
-    cfg.max_img_h            = root["max_img_h"].asInt();
-    cfg.max_img_w            = root["max_img_w"].asInt();
+    cfg.image_size = root["image_size"].asInt();
+    cfg.text_padding = root["text_padding"].asInt();
+    cfg.max_img_h = root["max_img_h"].asInt();
+    cfg.max_img_w = root["max_img_w"].asInt();
  
     const Json::Value mean = root["image_mean"];
     const Json::Value std  = root["image_std"];
@@ -42,20 +53,22 @@ Sam3Processor::Params Sam3Model::processorParams(const Config& cfg) {
     Sam3Processor::Params p;
     p.image_size   = cfg.image_size;
     p.text_padding = cfg.text_padding;
+
     for (int i = 0; i < 3; ++i) {
         p.image_mean[i] = cfg.image_mean[i];
         p.image_std[i]  = cfg.image_std[i];
     }
+    
     return p;
 }
 
 Sam3Model::Sam3Model(const std::string& models_path, const std::string& merges_path, const std::string& vocab_path, const std::string& config_path) :
     config_(loadConfig(config_path)),
-    image_encoder_(models_path + "/image_encoder.plan"),
-    text_encoder_ (models_path + "/text_encoder.plan"),
-    mask_decoder_ (models_path + "/mask_decoder.plan"),
-    processor_ (merges_path, vocab_path, processorParams(config_)),
-    h_logits_ (MAX_SLOTS),
+    image_encoder_(models_path + "/image_encoder_fp16.engine"),
+    text_encoder_(models_path + "/text_encoder_fp16.engine"),
+    mask_decoder_(models_path + "/mask_decoder_fp16.engine"),
+    processor_(merges_path, vocab_path, processorParams(config_)),
+    h_logits_(MAX_SLOTS),
     h_presence_(1)
 {
     cudaStreamCreate(&img_stream_);
@@ -90,29 +103,34 @@ std::vector<Detection> Sam3Model::forward(
         text_input.d_attention_mask,
         inference_stream_);
 
-    Sam3DecoderOutput output = mask_decoder_.decode(
+    Sam3DecoderOutput<float> output = mask_decoder_.decode(
         image_features,
         text_features,
         text_input.d_attention_mask,
-        image_input.d_original_sizes,
+        text_input.d_attention_mask_f,
         inference_stream_);
 
-    cudaStreamSynchronize(inference_stream_);
+    {
+        cudaError_t err = cudaStreamSynchronize(inference_stream_);
+        if (err != cudaSuccess) {
+            std::cerr << "[CUDA ERROR] decode sync failed: " << cudaGetErrorString(err) << "\n";
+        }
+    }
+    cudaMemcpy(h_logits_.data(), output.predicted_logits, MAX_SLOTS * sizeof(float), cudaMemcpyDeviceToHost);
+    cudaMemcpy(h_presence_.data(), output.presence_logits, sizeof(float), cudaMemcpyDeviceToHost);
 
-    cudaMemcpy(h_logits_.data(),   output.predicted_logits,
-               MAX_SLOTS * sizeof(float), cudaMemcpyDeviceToHost);
-    cudaMemcpy(h_presence_.data(), output.presence_logits,
-               sizeof(float), cudaMemcpyDeviceToHost);
-
-    if (h_presence_[0] < config_.presence_threshold)
+    const float presence_prob = sigmoidf(h_presence_[0]);
+    if (presence_prob < config_.presence_threshold) {
         return {};
+    }
 
     std::vector<int>   surviving_indices;
     std::vector<float> surviving_confidences;
     for (int i = 0; i < MAX_SLOTS; ++i) {
-        if (h_logits_[i] >= config_.confidence_threshold) {
+        const float confidence_prob = sigmoidf(h_logits_[i]);
+        if (confidence_prob >= config_.confidence_threshold) {
             surviving_indices.push_back(i);
-            surviving_confidences.push_back(h_logits_[i]);
+            surviving_confidences.push_back(confidence_prob);
         }
     }
 
@@ -126,7 +144,12 @@ std::vector<Detection> Sam3Model::forward(
                   N, SRC_MASK_H, SRC_MASK_W,
                   orig_h, orig_w, inference_stream_);
 
-    cudaStreamSynchronize(inference_stream_);
+    {
+        cudaError_t err = cudaStreamSynchronize(inference_stream_);
+        if (err != cudaSuccess) {
+            std::cerr << "[CUDA ERROR] upsampleMasks sync failed: " << cudaGetErrorString(err) << "\n";
+        }
+    }
 
     const size_t mask_pixels = static_cast<size_t>(orig_h) * orig_w;
     std::vector<float> mask_f(mask_pixels);
@@ -173,7 +196,12 @@ Sam3Result Sam3Model::infer(const cv::Mat& image, const std::vector<std::string>
     Sam3ImageInput image_input = processor_.preprocessImage(image);
 
     Sam3ImageFeatures image_features = image_encoder_.encode(image_input.d_image, img_stream_);
-    cudaStreamSynchronize(img_stream_);
+    {
+        cudaError_t err = cudaStreamSynchronize(img_stream_);
+        if (err != cudaSuccess) {
+            std::cerr << "[CUDA ERROR] image_encoder sync failed: " << cudaGetErrorString(err) << "\n";
+        }
+    }
 
     constexpr size_t feature_size = FeatureMap::C * FeatureMap::H * FeatureMap::W;
     std::vector<float> feature_data(feature_size);
@@ -186,10 +214,10 @@ Sam3Result Sam3Model::infer(const cv::Mat& image, const std::vector<std::string>
 
     std::vector<Detection> all_detections;
     for (int i = 0; i < static_cast<int>(texts.size()); ++i) {
-        auto dets = forward(image_features, image_input,
-                              texts[i], i, orig_h, orig_w);
-        for (auto& d : dets)
+        auto dets = forward(image_features, image_input, texts[i], i, orig_h, orig_w);
+        for (auto& d : dets) {
             all_detections.push_back(std::move(d));
+        }
     }
 
     return Sam3Result{

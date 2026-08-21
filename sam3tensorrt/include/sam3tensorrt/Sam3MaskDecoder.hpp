@@ -6,16 +6,21 @@
 
 #include <string>
 #include <cstdint>
+#include <cuda_fp16.h>
 #include <cuda_runtime.h>
 
 /**
  * Device pointers to mask decoder outputs.
- * Owned by Sam3MaskDecoder — valid until the next decode() call or destruction.
+ * Owned by Sam3MaskDecoder, valid until the next decode() call or destruction.
  * Caller must sync the stream before reading.*/
-struct Sam3DecoderOutput {
-    float* predicted_logits;
-    float* presence_logits; 
-    float* predicted_masks; 
+template <typename T>
+struct Sam3DecoderOutput 
+{
+    T* predicted_logits; 
+    T* predicted_boxes;       
+    T* predicted_boxes_xyxy;  
+    T* presence_logits;       
+    T* predicted_masks;       
 };
 
 /**
@@ -31,31 +36,43 @@ class Sam3MaskDecoder : public Sam3ModelBase
         Sam3MaskDecoder& operator=(const Sam3MaskDecoder&) = delete;
 
         /**
-         * Non-blocking forward pass.
-         * @param image_features    FPN features + positional encodings from Sam3ImageEncoder.
-         *                          image_features.fpn[i] → fpn_i
-         *                          image_features.pos[i] → fpn_pos_i  (name differs by design)
-         * @param text_features     Text embeddings from Sam3TextEncoder.
-         *                          text_features.text_embeddings → text_embeds
-         * @param d_attention_mask  [1, 32] int32 — same buffer used by Sam3TextEncoder,
-         *                          owned by Sam3Preprocessor.
-         * @param d_original_sizes  [1, 2]  int32 — original image HW before resizing,
-         *                          owned by Sam3Preprocessor.
-         * @param stream            CUDA stream owned by Sam3Model.
-         * @return                  Three device pointers to decoder outputs.
-         *                          Caller syncs the stream before reading. */
-        Sam3DecoderOutput decode(const Sam3ImageFeatures& image_features,
-                                 const Sam3TextFeatures& text_features,
-                                 const int32_t* d_attention_mask,
-                                 const int32_t* d_original_sizes,
-                                 cudaStream_t stream);
+         * Non-blocking forward pass of model.
+         * @param image_features FPN features + positional encodings from Sam3ImageEncoder.
+         * @param text_features Text embeddings from Sam3TextEncoder.
+         * @param d_attention_mask txt_masks padding mask -- [1, 32] bool. 1 = pad, 0 = real token.
+         * @param d_attention_mask_f Same as d_attention_mask, as float16.
+         * @param stream CUDA stream owned by Sam3Model.
+         * @return Three device pointers to decoder outputs.
+         * Caller syncs the stream before reading. */
+        Sam3DecoderOutput<float> decode(const Sam3ImageFeatures& image_features,
+                                  const Sam3TextFeatures& text_features,
+                                  const bool* d_attention_mask,
+                                  const __half* d_attention_mask_f,
+                                  cudaStream_t stream);
+
+        Sam3DecoderOutput<float> toFloat(cudaStream_t stream);
 
     private:
         void discoverAndAllocate();
 
-        float* d_predicted_logits_ = nullptr;
-        float* d_presence_logits_ = nullptr;
-        float* d_predicted_masks_ = nullptr;
+        __half* d_predicted_logits_ = nullptr;
+        __half* d_predicted_boxes_ = nullptr;
+        __half* d_predicted_boxes_xyxy_ = nullptr;
+        __half* d_presence_logits_ = nullptr;
+        __half* d_predicted_masks_ = nullptr;
 
-        Sam3DecoderOutput output_{};
+        size_t predicted_logits_count_ = 0;
+        size_t predicted_boxes_count_ = 0;
+        size_t predicted_boxes_xyxy_count_ = 0;
+        size_t presence_logits_count_ = 0;
+        size_t predicted_masks_count_ = 0;
+ 
+        float* d_predicted_logits_f_ = nullptr;
+        float* d_predicted_boxes_f_ = nullptr;
+        float* d_predicted_boxes_xyxy_f_ = nullptr;
+        float* d_presence_logits_f_ = nullptr;
+        float* d_predicted_masks_f_ = nullptr;
+
+        Sam3DecoderOutput<__half> output_ {};
+        Sam3DecoderOutput<float> output_f_ {};
 };
