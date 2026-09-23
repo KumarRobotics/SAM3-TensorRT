@@ -29,6 +29,7 @@ static constexpr size_t kFpnCount[3] = {
     256 * 46 * 46,    // fpn2 / pos2
 };
 static constexpr size_t kTxtFeatsCount = 32 * 1 * 256;
+static constexpr size_t kTxtEmbeddingsCount = 32 * 1 * 1024;
 static constexpr size_t kTxtLen = 32;  // txt_masks / txt_masks_f
 
 // Output shapes, per the engine's output0-4 bindings.
@@ -62,8 +63,8 @@ protected:
             image_features_.fpn_pos[i] = mallocZeroedHalf(kFpnCount[i]);
         }
 
-        text_features_.text_features = nullptr;  // unused by decode()
-        text_features_.text_embeddings = mallocZeroedHalf(kTxtFeatsCount);
+        text_features_.text_features = mallocZeroedHalf(kTxtFeatsCount);
+        text_features_.text_embeddings = mallocZeroedHalf(kTxtEmbeddingsCount);
 
         ASSERT_EQ(cudaMalloc(&d_attention_mask_, kTxtLen * sizeof(bool)), cudaSuccess);
         ASSERT_EQ(cudaMemset(d_attention_mask_, 0, kTxtLen * sizeof(bool)), cudaSuccess);
@@ -80,6 +81,7 @@ protected:
             cudaFree(image_features_.fpn[i]);
             cudaFree(image_features_.fpn_pos[i]);
         }
+        cudaFree(text_features_.text_features);
         cudaFree(text_features_.text_embeddings);
         cudaFree(d_attention_mask_);
         cudaFree(d_attention_mask_f_);

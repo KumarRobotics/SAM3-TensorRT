@@ -3,8 +3,11 @@
 #include <cuda_runtime.h>
 #include <opencv2/opencv.hpp>
 
+#include <algorithm>
+#include <cmath>
 #include <cstdlib>
 #include <memory>
+#include <set>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -137,4 +140,84 @@ TEST_F(Sam3ModelTest, DetectionFieldsAreValid) {
         // class_label must be non-empty
         EXPECT_FALSE(det.class_label.empty());
     }
+}
+
+TEST_F(Sam3ModelTest, InferThrowsOnEmptyTexts) {
+    EXPECT_THROW(model_->infer(image_, std::vector<std::string>{}), std::runtime_error);
+}
+
+TEST_F(Sam3ModelTest, InferThrowsOnEmptyImage) {
+    EXPECT_THROW(model_->infer(cv::Mat(), "car"), std::runtime_error);
+}
+
+TEST_F(Sam3ModelTest, DetectsCarsInTestImage) {
+    Sam3Result result = model_->infer(image_, "car");
+
+    ASSERT_FALSE(result.detections.empty());
+    for (const Detection& det : result.detections) {
+        EXPECT_EQ(det.class_label, "car");
+        EXPECT_EQ(det.class_id, 0);
+        EXPECT_GE(det.confidence, 0.3f);
+        EXPECT_LE(det.confidence, 1.0f);
+    }
+}
+
+TEST_F(Sam3ModelTest, ClassIdsMatchPromptOrder) {
+    const std::vector<std::string> texts = {"person", "car"};
+    Sam3Result result = model_->infer(image_, texts);
+
+    std::set<int> seen;
+    for (const Detection& det : result.detections) {
+        ASSERT_GE(det.class_id, 0);
+        ASSERT_LT(det.class_id, static_cast<int>(texts.size()));
+        EXPECT_EQ(det.class_label, texts[det.class_id]);
+        seen.insert(det.class_id);
+    }
+    EXPECT_EQ(seen, (std::set<int>{0, 1}));
+}
+
+TEST_F(Sam3ModelTest, BboxMatchesMaskBoundingRect) {
+    Sam3Result result = model_->infer(image_, "car");
+
+    for (const Detection& det : result.detections) {
+        const cv::Rect rect = cv::boundingRect(det.mask);
+        EXPECT_EQ(det.bbox, (std::vector<int>{rect.x, rect.y, rect.width, rect.height}));
+        EXPECT_GT(cv::countNonZero(det.mask), 0);
+    }
+}
+
+TEST_F(Sam3ModelTest, MasksAreBinary) {
+    Sam3Result result = model_->infer(image_, "car");
+
+    for (const Detection& det : result.detections) {
+        const int on = cv::countNonZero(det.mask == 255);
+        const int off = cv::countNonZero(det.mask == 0);
+        EXPECT_EQ(on + off, det.mask.rows * det.mask.cols);
+    }
+}
+
+TEST_F(Sam3ModelTest, FeaturesAreFiniteAndBounded) {
+    Sam3Result result = model_->infer(image_, "car");
+    const std::vector<float>& data = result.features.data();
+
+    float min_v = data[0], max_v = data[0];
+    for (float v : data) {
+        ASSERT_TRUE(std::isfinite(v));
+        min_v = std::min(min_v, v);
+        max_v = std::max(max_v, v);
+    }
+    EXPECT_LT(std::max(std::abs(min_v), std::abs(max_v)), 1000.0f);
+    EXPECT_GT(max_v - min_v, 1e-3f);
+}
+
+TEST_F(Sam3ModelTest, InferIsDeterministic) {
+    Sam3Result first = model_->infer(image_, "car");
+    Sam3Result second = model_->infer(image_, "car");
+
+    ASSERT_EQ(first.detections.size(), second.detections.size());
+    for (size_t i = 0; i < first.detections.size(); ++i) {
+        EXPECT_EQ(first.detections[i].bbox, second.detections[i].bbox);
+        EXPECT_FLOAT_EQ(first.detections[i].confidence, second.detections[i].confidence);
+    }
+    EXPECT_EQ(first.features.data(), second.features.data());
 }

@@ -77,6 +77,7 @@ class Sam3Model {
         // GPU buffers for upsampling allocated once for worst case
         int* d_indices_ = nullptr;  // [200]                       int32
         float* d_upsampled_ = nullptr;  // [200, max_img_h, max_img_w] float32
+        float* d_features_ = nullptr;
 
         // Host buffers for thresholding tiny, no need for pinned memory
         std::vector<float> h_logits_; // [200]

@@ -1,6 +1,9 @@
 #include <gtest/gtest.h>
 
 #include <cuda_runtime.h>
+#include <opencv2/opencv.hpp>
+
+#include <algorithm>
 #include <cmath>
 #include <vector>
 #include <numeric>
@@ -106,4 +109,71 @@ TEST(UpsampleMasksTest, FullSizeGpuMemory) {
     cudaFree(d_masks);
     cudaFree(d_indices);
     cudaFree(d_out);
+}
+
+static std::vector<float> runUpsample(const std::vector<float>& masks_h, const std::vector<int>& indices_h,
+                                      int src_h, int src_w, int dst_h, int dst_w) {
+    const int n = static_cast<int>(indices_h.size());
+    const size_t out_count = static_cast<size_t>(n) * dst_h * dst_w;
+
+    float* d_masks = nullptr;
+    int* d_indices = nullptr;
+    float* d_out = nullptr;
+    cudaMalloc(&d_masks, masks_h.size() * sizeof(float));
+    cudaMalloc(&d_indices, n * sizeof(int));
+    cudaMalloc(&d_out, out_count * sizeof(float));
+    cudaMemcpy(d_masks, masks_h.data(), masks_h.size() * sizeof(float), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_indices, indices_h.data(), n * sizeof(int), cudaMemcpyHostToDevice);
+
+    upsampleMasks(d_masks, d_indices, d_out, n, src_h, src_w, dst_h, dst_w, nullptr);
+
+    std::vector<float> out_h(out_count);
+    EXPECT_EQ(cudaDeviceSynchronize(), cudaSuccess);
+    cudaMemcpy(out_h.data(), d_out, out_count * sizeof(float), cudaMemcpyDeviceToHost);
+
+    cudaFree(d_masks);
+    cudaFree(d_indices);
+    cudaFree(d_out);
+    return out_h;
+}
+
+TEST(UpsampleMasksTest, SelectsIndexedSlots) {
+    constexpr int NUM_SLOTS = 200;
+    constexpr int SRC = 8, DST = 20;
+
+    std::vector<float> masks_h(NUM_SLOTS * SRC * SRC);
+    for (int slot = 0; slot < NUM_SLOTS; ++slot) {
+        std::fill_n(masks_h.begin() + slot * SRC * SRC, SRC * SRC, static_cast<float>(slot));
+    }
+
+    const std::vector<int> indices_h = {199, 3, 42};
+    const std::vector<float> out_h = runUpsample(masks_h, indices_h, SRC, SRC, DST, DST);
+
+    for (size_t m = 0; m < indices_h.size(); ++m) {
+        for (int i = 0; i < DST * DST; ++i) {
+            ASSERT_FLOAT_EQ(out_h[m * DST * DST + i], static_cast<float>(indices_h[m])) << "mask " << m;
+        }
+    }
+}
+
+TEST(UpsampleMasksTest, MatchesOpenCvBilinear) {
+    constexpr int NUM_SLOTS = 4;
+    constexpr int SRC_H = 184, SRC_W = 184;
+    constexpr int DST_H = 375, DST_W = 500;
+
+    std::vector<float> masks_h(NUM_SLOTS * SRC_H * SRC_W);
+    cv::Mat random(1, static_cast<int>(masks_h.size()), CV_32FC1, masks_h.data());
+    cv::randn(random, 0.0, 1.0);
+
+    const std::vector<int> indices_h = {2, 0};
+    const std::vector<float> out_h = runUpsample(masks_h, indices_h, SRC_H, SRC_W, DST_H, DST_W);
+
+    for (size_t m = 0; m < indices_h.size(); ++m) {
+        cv::Mat src(SRC_H, SRC_W, CV_32FC1, masks_h.data() + indices_h[m] * SRC_H * SRC_W);
+        cv::Mat expected;
+        cv::resize(src, expected, cv::Size(DST_W, DST_H), 0, 0, cv::INTER_LINEAR);
+
+        cv::Mat result(DST_H, DST_W, CV_32FC1, const_cast<float*>(out_h.data()) + m * DST_H * DST_W);
+        EXPECT_LT(cv::norm(result, expected, cv::NORM_INF), 1e-3) << "mask " << m;
+    }
 }

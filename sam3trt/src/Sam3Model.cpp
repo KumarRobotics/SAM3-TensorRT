@@ -81,11 +81,13 @@ Sam3Model::~Sam3Model() {
     cudaStreamDestroy(inference_stream_);
     cudaFree(d_indices_);
     cudaFree(d_upsampled_);
+    cudaFree(d_features_);
 }
 
 void Sam3Model::allocateBuffers() {
     cudaMalloc(&d_indices_, MAX_SLOTS * sizeof(int));
     cudaMalloc(&d_upsampled_, static_cast<size_t>(MAX_SLOTS) * config_.max_img_h * config_.max_img_w * sizeof(float));
+    cudaMalloc(&d_features_, static_cast<size_t>(FeatureMap::C) * FeatureMap::H * FeatureMap::W * sizeof(float));
 }
 
 std::vector<Detection> Sam3Model::forward(
@@ -205,7 +207,9 @@ Sam3Result Sam3Model::infer(const cv::Mat& image, const std::vector<std::string>
 
     constexpr size_t feature_size = FeatureMap::C * FeatureMap::H * FeatureMap::W;
     std::vector<float> feature_data(feature_size);
-    cudaMemcpy(feature_data.data(), image_features.fpn[FEATURE_IDX], feature_size * sizeof(float), cudaMemcpyDeviceToHost);
+    nativeToFloat(image_features.fpn[FEATURE_IDX], d_features_, feature_size, nvinfer1::DataType::kHALF, img_stream_);
+    cudaMemcpyAsync(feature_data.data(), d_features_, feature_size * sizeof(float), cudaMemcpyDeviceToHost, img_stream_);
+    cudaStreamSynchronize(img_stream_);
 
     int32_t orig_sizes[2];
     cudaMemcpy(orig_sizes, image_input.d_original_sizes, 2 * sizeof(int32_t), cudaMemcpyDeviceToHost);

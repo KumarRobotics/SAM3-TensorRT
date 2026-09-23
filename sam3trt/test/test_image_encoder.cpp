@@ -49,12 +49,12 @@ protected:
     // Copies the first `kSampleCount` half-precision elements from a device
     // buffer back to host as floats.
     static std::vector<float> sampleHost(const __half* d_ptr) {
-        std::vector<float> host(kSampleCount);
+        std::vector<__half> host(kSampleCount);
         cudaMemcpy(host.data(), d_ptr, kSampleCount * sizeof(__half), cudaMemcpyDeviceToHost);
 
         std::vector<float> out(kSampleCount);
         for (int i = 0; i < kSampleCount; ++i) {
-            out[i] = host[i];
+            out[i] = __half2float(host[i]);
         }
         return out;
     }
@@ -154,9 +154,9 @@ TEST_F(Sam3ImageEncoderTest, DeepestFeatureLevelHasExpectedShape) {
     Sam3ImageFeatures features = encoder_->encode(d_input_, stream_);
     cudaStreamSynchronize(stream_);
 
-    std::vector<float> fpn_host(kExpectedCount);
+    std::vector<__half> fpn_host(kExpectedCount);
     ASSERT_EQ(cudaMemcpy(fpn_host.data(), features.fpn[2], kExpectedCount * sizeof(__half),cudaMemcpyDeviceToHost), cudaSuccess);
 
-    std::vector<float> fpn_pos_host(kExpectedCount);
+    std::vector<__half> fpn_pos_host(kExpectedCount);
     ASSERT_EQ(cudaMemcpy(fpn_pos_host.data(), features.fpn_pos[2], kExpectedCount * sizeof(__half), cudaMemcpyDeviceToHost), cudaSuccess);
 }

@@ -9,6 +9,7 @@ docker run -it --rm \
     -v "`pwd`/../models:/home/`whoami`/models" \
     -v "`pwd`/../scripts:/home/`whoami`/scripts" \
     -v "`pwd`/../sam3trt:/home/`whoami`/sam3trt" \
+    -v "`pwd`/../sam3trtpy:/home/`whoami`/sam3trtpy" \
     -e DISPLAY=$DISPLAY \
     -e QT_X11_NO_MITSHM=1 \
     -e XAUTHORITY=$XAUTH \
