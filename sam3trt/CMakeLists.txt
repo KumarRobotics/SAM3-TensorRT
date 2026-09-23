@@ -11,6 +11,7 @@ set(CMAKE_CUDA_ARCHITECTURES "native" CACHE STRING
 Override with a semicolon-separated list for GPU-less CI builds e.g. '86;89;90'.")
 
 option(SAM3TRT_BUILD_TESTS "Build the gtest unit tests" ON)
+option(SAM3TRT_BUILD_ROS "Build the ROS 2 node when ROS 2 packages are available" ON)
 
 message(STATUS "CUDA architectures: ${CMAKE_CUDA_ARCHITECTURES}")
 
@@ -116,4 +117,37 @@ install(FILES
 if(SAM3TRT_BUILD_TESTS)
     enable_testing()
     add_subdirectory(test)
+endif()
+
+if(SAM3TRT_BUILD_ROS)
+    foreach(pkg ament_cmake ament_index_cpp rclcpp rclcpp_components sensor_msgs std_msgs)
+        find_package(${pkg} QUIET)
+        if(NOT ${pkg}_FOUND)
+            message(STATUS "${pkg} not found, skipping ROS node")
+            set(SAM3TRT_BUILD_ROS OFF)
+            break()
+        endif()
+    endforeach()
+endif()
+
+if(SAM3TRT_BUILD_ROS)
+    add_library(sam3_component SHARED ros/Sam3Node.cpp)
+    target_link_libraries(sam3_component PUBLIC
+        sam3trt
+        ament_index_cpp::ament_index_cpp
+        rclcpp::rclcpp
+        rclcpp_components::component
+        ${sensor_msgs_TARGETS}
+        ${std_msgs_TARGETS}
+    )
+    rclcpp_components_register_nodes(sam3_component "Sam3Node")
+
+    add_executable(sam3_node ros/node.cpp)
+    target_link_libraries(sam3_node PRIVATE sam3_component)
+
+    install(TARGETS sam3_component LIBRARY DESTINATION lib)
+    install(TARGETS sam3_node RUNTIME DESTINATION lib/${PROJECT_NAME})
+    install(DIRECTORY launch DESTINATION share/${PROJECT_NAME})
+
+    ament_package()
 endif()
