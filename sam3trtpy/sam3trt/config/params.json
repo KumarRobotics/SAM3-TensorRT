@@ -1,0 +1,10 @@
+{
+    "presence_threshold": 0.3,
+    "confidence_threshold": 0.3,
+    "image_mean": [0.5, 0.5, 0.5],
+    "image_std": [0.5, 0.5, 0.5],
+    "image_size": 644,
+    "text_padding": 32,
+    "max_img_h": 1536,
+    "max_img_w": 2048
+}

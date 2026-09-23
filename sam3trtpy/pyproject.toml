@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sam3trt"
+version = "1.0.0"
+description = "SAM3 TensorRT inference"
+requires-python = ">=3.10"
+dependencies = [
+    "numpy",
+    "opencv-python-headless",
+    "tensorrt>=10",
+    "cuda-core>=1.0",
+    "cuda-pathfinder",
+]
+
+[tool.setuptools]
+packages = ["sam3trt"]
+
+[tool.setuptools.package-data]
+sam3trt = ["kernels.cu", "config/*"]

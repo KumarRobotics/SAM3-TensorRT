@@ -15,6 +15,7 @@ target_link_libraries(test_upsample PRIVATE
     sam3trt_cuda
     GTest::GTest
     GTest::Main
+    ${OpenCV_LIBS}
     CUDA::cudart)
 
 add_executable(test_timing test_timing.cpp)
@@ -61,6 +62,43 @@ target_link_libraries(test_mask_decoder PRIVATE
     CUDA::cudart
 )
 
+add_executable(test_tokenizer test_tokenizer.cpp)
+target_compile_definitions(test_tokenizer PRIVATE
+    SAM3_CONFIG_DIR="${CMAKE_SOURCE_DIR}/config")
+target_link_libraries(test_tokenizer PRIVATE
+    sam3trt
+    GTest::GTest
+    GTest::Main
+)
+
+add_executable(test_processor test_processor.cpp)
+target_compile_definitions(test_processor PRIVATE
+    SAM3_CONFIG_DIR="${CMAKE_SOURCE_DIR}/config")
+target_link_libraries(test_processor PRIVATE
+    sam3trt
+    GTest::GTest
+    GTest::Main
+    ${OpenCV_LIBS}
+    CUDA::cudart
+)
+
+add_executable(test_cuda_kernels test_cuda_kernels.cpp)
+target_link_libraries(test_cuda_kernels PRIVATE
+    sam3trt_cuda
+    GTest::GTest
+    GTest::Main
+    ${OpenCV_LIBS}
+    CUDA::cudart
+)
+
+add_executable(test_visualize test_visualize.cpp)
+target_link_libraries(test_visualize PRIVATE
+    sam3trt
+    GTest::GTest
+    GTest::Main
+    ${OpenCV_LIBS}
+)
+
 include(GoogleTest)
 gtest_discover_tests(test_sam3model)
 gtest_discover_tests(test_upsample)
@@ -68,3 +106,7 @@ gtest_discover_tests(test_timing)
 gtest_discover_tests(test_image_encoder)
 gtest_discover_tests(test_text_encoder)
 gtest_discover_tests(test_mask_decoder)
+gtest_discover_tests(test_tokenizer)
+gtest_discover_tests(test_processor)
+gtest_discover_tests(test_cuda_kernels)
+gtest_discover_tests(test_visualize)
