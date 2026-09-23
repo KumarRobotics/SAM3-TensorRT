@@ -25,4 +25,9 @@ RUN sudo -E apt-get update && sudo -E apt-get install -y --no-install-recommends
 
 RUN sudo rosdep init && rosdep update
 
+RUN sudo apt update \
+ && sudo apt install -y ros-jazzy-rmw-zenoh-cpp ros-jazzy-rqt*
+ENV RMW_IMPLEMENTATION=rmw_zenoh_cpp
+ENV ROS_AUTOMATIC_DISCOVERY_RANGE=LOCALHOST
+
 RUN echo "source /opt/ros/jazzy/setup.bash" >> ~/.bashrc
