@@ -11,7 +11,7 @@ By default I export the text encoder with 32 tokens.
 
 Since SAM 3 is a gated model you will need to trace the model yourself once you get access to it on huggingface. Once you are granted access download the `sam3.pt` file and put it in the `models` directory.
 
-Trace the model suing the `.trace` docker image. You will need an up to date nvidia driver on your device.
+Trace the model suing the `.trt` docker image. You will need an up to date nvidia driver on your device.
 ```[bash]
 cd docker
 ./build-trt.bash
