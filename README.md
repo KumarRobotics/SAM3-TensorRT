@@ -1,4 +1,4 @@
-# SAM3 Tensor RT
+# SAM3 TensorRT
 
 This repo is a partial TensorRT implementation of [SAM 3](https://huggingface.co/facebook/sam3), designed with multi-class inference in mind. This implementation reuses the image encoding when there are multiple text inputs.
 
@@ -11,13 +11,13 @@ By default I export the text encoder with 32 tokens.
 
 Since SAM 3 is a gated model you will need to trace the model yourself once you get access to it on huggingface. Once you are granted access download the `sam3.pt` file and put it in the `models` directory.
 
-Trace the model suing the `.trt` docker image. You will need an up to date nvidia driver on your device.
+Trace the model using the `.trt` docker image. You will need an up to date nvidia driver on your device.
 ```[bash]
 cd docker
 ./build-trt.bash
 ./run-trt.bash
 ```
-This will bring you inside the docker image, then run: `export_all.py`
+This will bring you inside the docker image, then run: `python3 export_all.py`
 
 ### Building CPP
 
@@ -89,7 +89,7 @@ Topics:
 | `/segmentation` | `sensor_msgs/Image` | published |
 | `/segmentation/compressed` | `sensor_msgs/CompressedImage` | published when `publish_compressed` is `true` |
 
-Remap either `/image` or `/image/compressed` to your camera topic, not both. image_transport publishes the raw and compressed topics together, so remapping both runs inference on every frame twice.
+Remap either `/image` or `/image/compressed` to your camera topic, not both.
 
 Parameters:
 

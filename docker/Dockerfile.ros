@@ -30,4 +30,5 @@ RUN sudo apt update \
 ENV RMW_IMPLEMENTATION=rmw_zenoh_cpp
 ENV ROS_AUTOMATIC_DISCOVERY_RANGE=LOCALHOST
 
+RUN mkdir -p ws/src 
 RUN echo "source /opt/ros/jazzy/setup.bash" >> ~/.bashrc
