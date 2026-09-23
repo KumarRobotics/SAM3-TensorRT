@@ -79,7 +79,7 @@ def trace_and_export_text_encoder(model : torch.nn.Module, input : Any, engine_p
         exp_program,
         arg_inputs=[input[0].to(DEVICE), input[1].to(DEVICE)],
         optimization_level=5,
-        use_explicit_typeing=True,
+        use_explicit_typing=True,
         device=torch_tensorrt.Device(f"cuda:0"),
     )
 
@@ -184,7 +184,7 @@ def export_and_verify_text_encoder(predictor : SAM3SemanticPredictor, fp16 : boo
 
     precision = "fp16" if fp16 else "fp32"
     engine_path = os.path.join(os.environ["HOME"], "models", f"text_encoder_{precision}.engine")
-    #trace_and_export_text_encoder(predictor.model, (input_ids, attention_mask), engine_path, args.fp16)
+    trace_and_export_text_encoder(predictor.model, (input_ids, attention_mask), engine_path, fp16)
 
     _verify_engine(engine_path, (input_ids, attention_mask), (torch_output[0], torch_output[2]), 0.999 if fp16 else 0.9999)
 

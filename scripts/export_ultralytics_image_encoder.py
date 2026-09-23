@@ -80,12 +80,6 @@ def patch_layernorm(model):
 def trace_and_export_image_encoder(model : torch.nn.Module, input : Any, engine_path : str, fp16 : bool) -> Tuple[torch.Tensor]: 
     wrapper = ImageEncoderWrapper(model).to(DEVICE).eval()
 
-    predictor.setup_source(input)
-
-    for batch in predictor.dataset:
-        input = predictor.preprocess(batch[1])
-        break
-    
     print("[ImageEncoderExport] Tracing Image Encoder Model")
     torch_output = wrapper(input) # warm up
     exp_program = torch.export.export(wrapper, (input,), strict=False)
@@ -223,16 +217,17 @@ def export_and_verify_image_encoder(predictor : SAM3SemanticPredictor, fp16 : bo
 
     precision = "fp16" if fp16 else "fp32"
     engine_path = os.path.join(os.environ["HOME"], "models", f"image_encoder_{precision}.engine")
-    #_ = trace_and_export_image_encoder(
-    #    predictor.model,
-    #    img,
-    #    engine_path,
-    #    fp16
-    #)
 
     for batch in predictor.dataset:
         im = predictor.preprocess(batch[1])
         break
+    _ = trace_and_export_image_encoder(
+        predictor.model,
+        im,
+        engine_path,
+        fp16
+    )
+
     _verify_engine(engine_path, im, torch_output, min_cos=0.999 if fp16 else 0.9999)
 
     return torch_output
@@ -255,15 +250,16 @@ if __name__ == "__main__":
 
     precision = "fp16" if args.fp16 else "fp32"
     engine_path = os.path.join(os.environ["HOME"], "models", f"image_encoder_{precision}.engine")
-    _ = trace_and_export_image_encoder(
-        predictor.model,
-        img,
-        engine_path,
-        args.fp16
-    )
 
     for batch in predictor.dataset:
         im = predictor.preprocess(batch[1])
         break
+    _ = trace_and_export_image_encoder(
+        predictor.model,
+        im,
+        engine_path,
+        args.fp16
+    )
+
     _verify_engine(engine_path, im, torch_output, min_cos=0.999 if args.fp16 else 0.9999) 
 

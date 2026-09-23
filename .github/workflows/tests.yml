@@ -1,0 +1,62 @@
+name: Unit Tests
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: unit-tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  unit-tests:
+    runs-on: [self-hosted, linux, gpu]
+    timeout-minutes: 60
+
+    if: >-
+      github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.full_name == github.repository
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          clean: false
+
+      - name: Check GPU and engines
+        run: |
+          nvidia-smi
+          echo "HOME=$HOME"
+          ls -lh "$HOME/models"
+          if ! ls "$HOME"/models/*.engine >/dev/null 2>&1; then
+            echo "::error::No .engine files found in $HOME/models on this runner"
+            exit 1
+          fi
+
+      # Cpp tests
+      - name: Configure (C++)
+        working-directory: sam3trt
+        run: cmake -S . -B build -DSAM3TRT_BUILD_TESTS=ON -DSAM3TRT_BUILD_ROS=OFF
+
+      - name: Build (C++)
+        working-directory: sam3trt
+        run: cmake --build build -j"$(nproc)"
+
+      - name: Run C++ tests
+        working-directory: sam3trt
+        run: ctest --test-dir build --output-on-failure -E Timing
+
+      # Python tests
+      - name: Install and run Python tests
+        if: ${{ !cancelled() }}
+        run: |
+          python3 -m venv --system-site-packages .venv
+          . .venv/bin/activate
+          pip install ./sam3trtpy
+          cd sam3trtpy
+          python3 -m unittest discover -s tests -v
