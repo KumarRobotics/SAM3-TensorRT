@@ -11,7 +11,7 @@ By default I export the text encoder with 32 tokens.
 
 Since SAM 3 is a gated model you will need to trace the model yourself once you get access to it on huggingface. Once you are granted access download the `sam3.pt` file and put it in the `models` directory.
 
-Trace the model suing the `.trace` docker image. You will need an up to date nvidia driver on your device.
+Trace the model suing the `.trt` docker image. You will need an up to date nvidia driver on your device.
 ```[bash]
 cd docker
 ./build-trt.bash
@@ -69,6 +69,79 @@ for (const Detection& det : result.detections) {
 }
 std::vector<float> feature = result.features.patch(i, j);
 cv::Mat viz = visualize(image, result);
+```
+
+### ROS 2
+
+When ROS 2 is sourced, the cmake build also builds a ROS 2 node, both as a standalone executable (`sam3_node`) and as a component (`Sam3Node`). Put `sam3trt` in your workspace `src` directory and build it with:
+```[bash]
+colcon build --packages-select sam3trt
+```
+The node is only built if `ament_cmake`, `ament_index_cpp`, `rclcpp`, `rclcpp_components`, `sensor_msgs` and `std_msgs` are found. To skip it add `-DSAM3TRT_BUILD_ROS=OFF`.
+
+Topics:
+
+| Topic | Type | Direction |
+| --- | --- | --- |
+| `/image` | `sensor_msgs/Image` | subscribed |
+| `/image/compressed` | `sensor_msgs/CompressedImage` | subscribed |
+| `/classes` | `std_msgs/String` | subscribed, transient local |
+| `/segmentation` | `sensor_msgs/Image` | published |
+| `/segmentation/compressed` | `sensor_msgs/CompressedImage` | published when `publish_compressed` is `true` |
+
+Remap either `/image` or `/image/compressed` to your camera topic, not both. image_transport publishes the raw and compressed topics together, so remapping both runs inference on every frame twice.
+
+Parameters:
+
+| Parameter | Default | Description |
+| --- | --- | --- |
+| `models_path` | `~/models` | directory containing the `.engine` files |
+| `config_path` | `share/sam3trt/config` | directory containing `merges.txt`, `vocab.json` and `params.json` |
+| `publish_compressed` | `false` | also publish a jpeg on `/segmentation/compressed` |
+
+Nothing is published until classes are set. Set them as a comma separated list on `/classes`. The topic is transient local, so the publisher must be transient local too, and the node still receives the last classes if it starts after they were published:
+```[bash]
+ros2 topic pub --once --qos-durability transient_local --qos-reliability reliable /classes std_msgs/msg/String "{data: 'person, car'}"
+```
+Publishing new classes switches the segmentation on the next frame. Publishing an empty string stops it.
+
+Edit the remapping in `launch/segment.launch.py` to your camera topic and run it with:
+```[bash]
+ros2 launch sam3trt segment.launch.py publish_compressed:=true
+```
+
+To run the node as a component, add it to a container in your launch file. Use `component_container_mt` so class updates are not blocked behind inference:
+```[python]
+from launch_ros.actions import ComposableNodeContainer
+from launch_ros.descriptions import ComposableNode
+
+container = ComposableNodeContainer(
+    name="sam3_container",
+    namespace="",
+    package="rclcpp_components",
+    executable="component_container_mt",
+    output="screen",
+    composable_node_descriptions=[
+        ComposableNode(
+            package="sam3trt",
+            plugin="Sam3Node",
+            name="sam3",
+            parameters=[{"publish_compressed": True}],
+            remappings=[("/image/compressed", "/cam_driver/image_raw/compressed")],
+        ),
+    ],
+)
+```
+To load it into a container that is already running, use `LoadComposableNodes`:
+```[python]
+from launch_ros.actions import LoadComposableNodes
+
+load = LoadComposableNodes(
+    target_container="/my_container",
+    composable_node_descriptions=[
+        ComposableNode(package="sam3trt", plugin="Sam3Node", name="sam3"),
+    ],
+)
 ```
 
 ### Installing Python
