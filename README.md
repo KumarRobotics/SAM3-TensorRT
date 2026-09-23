@@ -14,9 +14,8 @@ Since SAM 3 is a gated model you will need to trace the model yourself once you 
 Trace the model suing the `.trace` docker image. You will need an up to date nvidia driver on your device.
 ```[bash]
 cd docker
-./build-trace.bash
-cd .. 
-./run-trace.bash
+./build-trt.bash
+./run-trt.bash
 ```
 This will bring you inside the docker image, then run: `export_all.py`
 
@@ -29,6 +28,21 @@ cmake -S . -B build
 cmake --build build
 ```
 this with give you a `sam3` executable with you can run with `./sam3 <label>` which gives a `test_viz.png` file with the detections drawn on the original image.
+
+### API Usage
+
+Initialize the model with:
+```[cpp]
+Sam3Model model(models, CONFIG_DIR + "/merges.txt", CONFIG_DIR + "/vocab.json", CONFIG_DIR + "/params.json");
+```
+and infer with:
+```[cpp]
+cv::Mat image = ... // in RGB format
+std::string label = "...";
+// or 
+std::vector<std::string> label = {..., };
+Sam3Result result = model(image, label);
+```
 
 ### Performance
 

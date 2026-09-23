@@ -7,4 +7,4 @@
 **/*.zip
 **/__pycache__
 **/build
-sam3tensorrt/sam3
+sam3trt/sam3
