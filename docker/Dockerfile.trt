@@ -35,6 +35,9 @@ WORKDIR /home/$USER
  
 RUN sudo apt install -y python3-pip
 RUN pip3 install --no-deps opencv-python-headless ultralytics
+RUN pip install --no-cache-dir ultralytics==8.4.121
+ENV LD_LIBRARY_PATH=/opt/hpcx/ucx/lib:/opt/hpcx/ucc/lib:${LD_LIBRARY_PATH}
+
 
 RUN sudo apt update \
  && sudo apt install -y \

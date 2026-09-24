@@ -238,7 +238,7 @@ def trace_and_export_mask_deocder(model : torch.nn.Module, input : Any, engine_p
     print("[MaskDecoderExport] Patching Mask Decoder Model")
     _, _, spatial_shapes, _ = fusion_wrapper(*input)
     H, W = int(spatial_shapes[0, 0]), int(spatial_shapes[0, 1])
-    patch_rpb(predictor.model, H, W)
+    patch_rpb(model, H, W)
    
     torch_output = wrapper(*input)
 
@@ -256,9 +256,10 @@ def trace_and_export_mask_deocder(model : torch.nn.Module, input : Any, engine_p
             offload_module_to_cpu=True,
             device=torch_tensorrt.Device("cuda:0"),
     )
+    model.to(DEVICE)  # offload_module_to_cpu leaves the weights on the CPU
 
-    #with open(engine_path, "wb") as f:
-    #    f.write(engine_bytes)
+    with open(engine_path, "wb") as f:
+        f.write(engine_bytes)
 
     return torch_output 
 
@@ -376,12 +377,12 @@ def export_and_verify_mask_decoder(predictor : SAM3SemanticPredictor, input : Tu
 
     precision =  "fp16" if fp16 else "fp32"
     engine_path = os.path.join(os.environ["HOME"], "models", f"mask_decoder_{precision}.engine")
-    #trace_and_export_mask_deocder(
-    #    predictor.model, 
-    #    input,
-    #    engine_path,
-    #    fp16
-    #)
+    trace_and_export_mask_deocder(
+        predictor.model, 
+        input,
+        engine_path,
+        fp16
+    )
     predictor.set_image(img)
     ref = predictor(text=captions)[0] 
     for batch in predictor.dataset:

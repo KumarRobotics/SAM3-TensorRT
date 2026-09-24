@@ -1,0 +1,80 @@
+name: Unit Tests
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: unit-tests-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  IMAGE: sam3-tensorrt:infer
+
+jobs:
+  unit-tests:
+    runs-on: [self-hosted, linux, gpu]   # must match --labels used in config.sh
+    timeout-minutes: 90
+
+    if: >-
+      github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.full_name == github.repository
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          clean: false
+
+      - name: Build docker image
+        working-directory: docker
+        run: ./build-trt.bash
+
+      - name: Run unit tests in container
+        env:
+          MODELS_DIR: /home/jason/Projects/sam3-ws/SAM3-TensorRT/models
+          TEST_SCRIPT: |
+            set -uo pipefail
+            rc=0
+
+            if ! ls "$HOME"/models/*.engine >/dev/null 2>&1; then
+              echo "::error::No .engine files found in the mounted models dir"
+              exit 1
+            fi
+            nvidia-smi || true
+
+            echo "::group::C++ build and tests"
+            ( cd "$HOME/sam3trt" \
+              && cmake -S . -B build -DSAM3TRT_BUILD_TESTS=ON -DSAM3TRT_BUILD_ROS=OFF \
+              && cmake --build build -j"$(nproc)" \
+              && ctest --test-dir build --output-on-failure -E Timing ) || rc=1
+            echo "::endgroup::"
+
+            echo "::group::Python tests"
+            ( cd "$HOME" \
+              && pip install --user --break-system-packages --no-cache-dir ./sam3trtpy \
+              && cd sam3trtpy \
+              && python3 -m unittest discover -s tests -v ) || rc=1
+            echo "::endgroup::"
+
+            exit $rc
+        run: |
+          U="$(whoami)"
+          # Same mounts as docker/run-trt.bash, minus the interactive/X11 parts.
+          docker run --rm \
+            --gpus all \
+            --ipc=host \
+            --user "$(id -u):$(id -g)" \
+            -e HOME="/home/$U" \
+            -e TEST_SCRIPT \
+            -v "$MODELS_DIR:/home/$U/models" \
+            -v "$GITHUB_WORKSPACE/sam3trt:/home/$U/sam3trt" \
+            -v "$GITHUB_WORKSPACE/sam3trtpy:/home/$U/sam3trtpy" \
+            -w "/home/$U" \
+            "$IMAGE" \
+            bash -c "$TEST_SCRIPT"
