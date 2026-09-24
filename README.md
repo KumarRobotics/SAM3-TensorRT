@@ -1,5 +1,7 @@
 # SAM3 TensorRT
 
+[![Unit Tests](https://github.com/KumarRobotics/SAM3-TensorRT/actions/workflows/tests.yml/badge.svg?branch=main)](https://github.com/KumarRobotics/SAM3-TensorRT/actions/workflows/tests.yml)
+
 This repo is a partial TensorRT implementation of [SAM 3](https://huggingface.co/facebook/sam3), designed with multi-class inference in mind. This implementation reuses the image encoding when there are multiple text inputs.
 
 The TensorRT export must be run on the type of hardware it will be deployed on, i.e. you must export for a jetson on a jetson device.
